@@ -575,7 +575,7 @@ onDone → store 写入完整消息 + idle 状态
 | 空状态 | 显示"正在连接..."，快捷提示禁用 | 智能引导：安装 CLI 或配置 API Key |
 | MiMo CLI | 仅在引导中安装，跳过无法再装 | 设置 → MiMo Serve 区域常驻安装按钮 |
 | 崩溃 | terminalSessions 作用域错误导致退出崩溃 | 提升到模块顶层作用域 |
-| 制品 | 仅 NSIS 安装包 | NSIS 安装包 + Portable tar.xz 免安装版 + macOS DMG (x64/arm64) |
+| 制品 | 仅 NSIS 安装包 | NSIS 安装包 + Portable tar.xz 免安装版 + macOS DMG (x64/arm64，内置 MiMo CLI) |
 | 文件锁 | 退出后 mimo 进程残留锁住文件 | 退出时 `taskkill /f /t /im mimo.exe` 彻底清理 |
 
 **修改文件：**
@@ -587,6 +587,37 @@ onDone → store 写入完整消息 + idle 状态
 - `README.md` / `package.json` — 制品列表、构建目标更新
 - `.github/workflows/release.yml` — 全平台 CI
 - `~/.mimocode/MEMORY.md` — 引用 [[mimo-workflow]] 技能
+
+### V4 → V5 macOS 构建与启动体验（2026-06-15）
+
+**核心变更：**
+
+| 模块 | 旧实现 | 新实现 |
+|------|--------|--------|
+| macOS 构建 | DMG 打包失败（图标太小 + 无代码签名 + 缺 vite build） | 图标放大到 1024px + 跳过签名 + CI 加 vite build 步骤 |
+| MiMo CLI 安装 | 引导页从 GitHub 下载（国内慢，30+ 秒） | 内置 CLI 秒装 → Gitee 镜像 → GitHub → npm |
+| CLI 覆盖 | 无检查，直接覆盖已安装版本 | 检测已有版本，已装则跳过避免降级 |
+| 启动速度 | `connectToServer()` 阻塞 UI 渲染，黑屏数秒 | 异步连接，UI 先渲染，后台建立连接 |
+| CLI 未安装 | `spawn('mimo')` 失败后等 15 秒超时 | 启动前先 `mimoDetect()`，未装直接跳过 |
+| 服务初始化 | 连接即显示"Agent 模式"（实际技能不可用） | `serverReady` 状态：初始化中蓝色横幅 → 完成后绿色 Agent 模式 |
+| macOS 布局 | 交通灯按钮被对话列表遮挡 | 所有视图顶部加 36px drag region |
+| 技能加载 | mimo serve 初始化期间技能列表空 | `serverReady` 后自动刷新技能 |
+| Electron 下载 | 默认从 GitHub 下载二进制（国内慢） | `.npmrc` 配置 npmmirror 镜像 |
+
+**新建/修改文件：**
+- `build/icon.png` — 256×256 → 1024×1024
+- `electron/services/mimoInstaller.cjs` — `installFromBundled()` + Gitee 镜像 + 已安装检测
+- `electron/services/streaming.cjs` — CLI 不存在时自动从内置安装
+- `src/lib/api.ts` — `connectToServer()` 改为非阻塞
+- `src/stores/chatStore.ts` — `serverReady` 状态 + 初始化完成自动加载 sessions/skills
+- `src/views/ChatView/index.tsx` — 初始化中蓝色横幅 + Agent 模式用 `serverReady` 判断
+- `src/views/ChatView/EmptyState.tsx` — 初始化中/连接中/离线三种文案
+- `src/views/ChatView/ConversationList.tsx` — 顶部 drag region + 对话标题上移
+- `src/views/ChatView/ChatHeader.tsx` — 顶部 padding 对齐
+- `src/views/*/index.tsx` — 所有视图加 36px drag region
+- `scripts/release.cjs` — 构建前自动下载 MiMo CLI
+- `.github/workflows/release.yml` — 三平台下载 CLI + vite build + 跳过 >100MB Gitee 上传
+- `.gitignore` — 排除 `cli/` 目录
 
 ---
 
@@ -613,9 +644,12 @@ tar xf MiMo-Studio-1.0.0-win-x64-Portable.tar.xz
 
 **首次启动**
 1. 显示欢迎引导 → 点击"开始使用"
-2. 检测 MiMo CLI（如已安装则自动跳到下一步）
-3. 推荐安装 MiMo CLI 以获得完整 Agent 能力
-4. 也可跳过，之后在空状态页或设置页随时安装
+2. MiMo CLI 从内置二进制自动安装（秒装，无需联网）
+3. MiMo Serve 初始化期间显示蓝色"正在初始化"横幅
+4. 初始化完成后自动切换为绿色"Agent 模式"
+5. 如内置安装失败，引导页提供 Gitee 镜像下载（国内快）或 GitHub 下载
+
+> **已安装 CLI 的用户**：如果 `~/.mimocode/bin/mimo` 已存在且版本有效，自动跳过安装，不会覆盖降级。
 
 **退出程序**
 - 点击 ✕ 按钮弹出确认对话框，防止误关
