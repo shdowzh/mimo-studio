@@ -40,14 +40,14 @@ async function startMimoServe() {
     // 尝试从内置 CLI 安装
     console.log('[streaming] MiMo CLI not found, trying bundled install...')
     try {
-      await mimoInstall(null) // null = no eventSender, silent
+      await mimoInstall(null)
       cliInfo = await mimoDetect()
     } catch (e) {
       console.log('[streaming] Bundled install failed, skipping serve')
       return 0
     }
     if (!cliInfo.installed) {
-      console.log('[streaming] MiMo CLI still not installed after install attempt, skipping serve')
+      console.log('[streaming] MiMo CLI still not installed, skipping serve')
       return 0
     }
   }

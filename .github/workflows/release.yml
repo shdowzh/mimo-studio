@@ -112,10 +112,15 @@ jobs:
 
           echo "Release ID: $RELEASE_ID"
 
-          # Upload all assets
+          # Upload all assets (skip files > 100MB for Gitee)
           find . -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \) | while read f; do
-            echo "Uploading: $f"
-            curl -s -X POST \
-              "https://gitee.com/api/v5/repos/shdowzh/mimo-studio/releases/$RELEASE_ID/attach_files?access_token=$GITEE_TOKEN" \
-              -F "file=@$f"
+            SIZE=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null || echo 0)
+            if [ "$SIZE" -gt 104857600 ]; then
+              echo "Skipping (>$100MB): $f ($(echo "scale=1; $SIZE/1048576" | bc)MB)"
+            else
+              echo "Uploading: $f"
+              curl -s -X POST \
+                "https://gitee.com/api/v5/repos/shdowzh/mimo-studio/releases/$RELEASE_ID/attach_files?access_token=$GITEE_TOKEN" \
+                -F "file=@$f"
+            fi
           done
