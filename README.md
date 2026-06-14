@@ -10,7 +10,7 @@
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" /></a>
-  <a href="https://gitee.com/mimo-studio/mimo-studio/releases"><img src="https://img.shields.io/badge/release-v1.0.0-green.svg" /></a>
+  <a href="https://gitee.com/shdowzh/mimo-studio/releases"><img src="https://img.shields.io/badge/release-v1.0.0-green.svg" /></a>
   <img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg" />
 </p>
 
@@ -32,7 +32,7 @@ MiMo Studio 是 [MiMo Code](https://github.com/XiaomiMiMo/MiMo-Code) 的跨平�
 
 ### 下载预编译包
 
-从 [Releases](https://gitee.com/mimo-studio/mimo-studio/releases) 下载对应平台安装包：
+从 [Releases](https://gitee.com/shdowzh/mimo-studio/releases) 下载对应平台安装包：
 
 | 平台 | 包 |
 |------|------|
@@ -44,7 +44,7 @@ MiMo Studio 是 [MiMo Code](https://github.com/XiaomiMiMo/MiMo-Code) 的跨平�
 ### 从源码构建
 
 ```bash
-git clone https://gitee.com/mimo-studio/mimo-studio.git
+git clone https://gitee.com/shdowzh/mimo-studio.git
 cd mimo-studio
 npm install
 npm run electron:build

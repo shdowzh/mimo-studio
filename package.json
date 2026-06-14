@@ -6,10 +6,10 @@
   "main": "electron/main.cjs",
   "author": "MiMo Studio Contributors",
   "license": "MIT",
-  "homepage": "https://gitee.com/mimo-studio/mimo-studio",
+  "homepage": "https://gitee.com/shdowzh/mimo-studio",
   "repository": {
     "type": "git",
-    "url": "https://gitee.com/mimo-studio/mimo-studio.git"
+    "url": "https://gitee.com/shdowzh/mimo-studio.git"
   },
   "scripts": {
     "dev": "vite",
