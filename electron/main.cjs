@@ -9,6 +9,7 @@ const { readMemory, writeMemory, readSkills, readSkill, writeSkill, deleteSkill,
 
 let mainWindow
 let isQuitting = false
+const terminalSessions = new Map()
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -87,7 +88,6 @@ function setupIPC() {
 
   // === 终端（本地 shell — 可用于 mimo serve 离线时）===
   const cp = require('child_process')
-  const terminalSessions = new Map()
 
   ipcMain.handle('terminal:create', (event, opts) => {
     const id = require('crypto').randomUUID()

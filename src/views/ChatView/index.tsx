@@ -23,10 +23,10 @@ export default function ChatView() {
     setLastError,
   } = useChatStore()
 
-  // 判断当前是 Agent 模式还是直连模式
-  const isMimoModel = currentProvider === 'mimo' || currentProvider === 'opencode' || !currentProvider
-  const isAgentMode = serverConnected && isMimoModel
-  const isDirectMode = !serverConnected || !isMimoModel
+  // 模式判断：mimo serve 在线 → Agent 模式（所有模型走 MiMo Code Provider 系统）
+  // mimo serve 离线 → 直连模式（fallback，纯文本无 Agent 能力）
+  const isAgentMode = serverConnected
+  const isDirectMode = !serverConnected
 
   // 初始化：连接 mimo serve + 启动 SSE 监听
   useEffect(() => {
@@ -81,11 +81,9 @@ export default function ChatView() {
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isAgentMode ? 'bg-green-500' : 'bg-amber-500'}`} />
             {isAgentMode ? (
-              <span>Agent 模式 — 工具调用 · 文件操作 · 权限管理 均可用</span>
-            ) : isDirectMode && currentProvider && !isMimoModel ? (
-              <span>直连 {currentProvider} — 纯文本模式（无 Agent 能力）</span>
+              <span>Agent 模式 — 工具调用 · 文件操作 · 权限管理 均可用{currentProvider && currentProvider !== 'mimo' && currentProvider !== 'opencode' ? `（经 MiMo Code → ${currentProvider}）` : ''}</span>
             ) : (
-              <span>MiMo Serve 未连接 — 纯文本模式（无 Agent 能力）</span>
+              <span>离线模式 — MiMo Serve 未连接，纯文本（无 Agent 能力）{currentProvider ? `，直连 ${currentProvider}` : ''}</span>
             )}
           </div>
         )}

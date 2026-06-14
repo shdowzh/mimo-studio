@@ -126,10 +126,10 @@ export default function ChatHeader() {
   }
 
   const allOptions = [
-    // MiMo 模型（始终显示）
-    ...(mimoModels.length > 0 ? [{ label: serverConnected ? 'MiMo Serve' : 'MiMo（需连接 MiMo Serve）', items: mimoModels }] : []),
-    // 外部 Provider
-    ...(configuredModels.length > 0 ? [{ label: '外部 Provider', items: configuredModels }] : []),
+    // 服务端在线时：统一显示所有模型（全部走 MiMo Code）
+    ...(mimoModels.length > 0 ? [{ label: serverConnected ? 'MiMo Code 模型' : 'MiMo（需连接 MiMo Serve）', items: mimoModels }] : []),
+    // 离线时：外部 Provider 仅文本模式
+    ...(configuredModels.length > 0 ? [{ label: serverConnected ? '更多模型（经 MiMo Code）' : '离线可用（仅文本）', items: configuredModels }] : []),
   ]
 
   // 判断模型是否当前选中（动态计算，确保切换后立即反映）
@@ -185,7 +185,7 @@ export default function ChatHeader() {
                 <div key={gi}>
                   <div className="px-3 py-1.5 text-[10px] font-semibold text-mc-text-muted uppercase tracking-wider border-b border-mc-border-subtle/50">
                     {group.label}
-                    {group.label === 'MiMo Serve' && <span className="ml-1 text-mc-success normal-case font-normal">✓</span>}
+                    {serverConnected && group.items === mimoModels && group.items.length > 0 && group.items[0]?.providerId === 'mimo' && <span className="ml-1 text-mc-success normal-case font-normal">✓</span>}
                   </div>
                   {group.items.map((opt) => (
                     <button

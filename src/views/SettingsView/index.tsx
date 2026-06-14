@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { isElectron, getAPI } from '@/lib/ipc'
-import { Settings as SettingsIcon, Palette, Info, Shield, RefreshCw } from 'lucide-react'
+import { Settings as SettingsIcon, Palette, Info, Shield, RefreshCw, Download, AlertCircle, CheckCircle } from 'lucide-react'
 import { useThemeStore, THEMES, type ThemeId } from '@/stores/themeStore'
 import { useUIStore } from '@/stores/uiStore'
 import { PROVIDER_TEMPLATES } from '@/config/providerTemplates'
@@ -209,15 +209,18 @@ function ProvidersTab() {
       {/* MiMo */}
       <div>
         <h3 className="text-xs font-medium text-mc-text mb-3">MiMo Serve</h3>
-        <div className={`mc-card p-4 flex items-center gap-3 ${serverOk ? 'border-mc-success/30' : ''}`}>
-          <Shield size={16} strokeWidth={1.5} className={serverOk ? 'text-mc-success' : 'text-mc-text-muted'} />
-          <div className="flex-1">
-            <h4 className="text-xs font-medium text-mc-text">MiMo Auto</h4>
-            <p className="text-[10px] text-mc-text-muted">官方免费模型，启动 mimo serve 即可使用完整 Agent 能力（工具调用/文件操作/权限）</p>
+        <div className={`mc-card p-4 space-y-3 ${serverOk ? 'border-mc-success/30' : ''}`}>
+          <div className="flex items-center gap-3">
+            <Shield size={16} strokeWidth={1.5} className={serverOk ? 'text-mc-success' : 'text-mc-text-muted'} />
+            <div className="flex-1">
+              <h4 className="text-xs font-medium text-mc-text">MiMo Auto</h4>
+              <p className="text-[10px] text-mc-text-muted">官方免费模型，启动 mimo serve 即可使用完整 Agent 能力（工具调用/文件操作/权限）</p>
+            </div>
+            <span className={`text-[10px] px-2 py-0.5 rounded ${serverOk ? 'text-mc-success bg-mc-success/10' : 'text-mc-text-muted bg-mc-elevated'}`}>
+              {serverOk ? '已连接' : '未连接'}
+            </span>
           </div>
-          <span className={`text-[10px] px-2 py-0.5 rounded ${serverOk ? 'text-mc-success bg-mc-success/10' : 'text-mc-text-muted bg-mc-elevated'}`}>
-            {serverOk ? '已连接' : '未连接'}
-          </span>
+          {!serverOk && <MimoCliInstall />}
         </div>
       </div>
 
@@ -350,6 +353,64 @@ function CustomProviderCard({ apiKeys, serverOk, onKeysUpdate }: {
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// === MiMo CLI Install ===
+function MimoCliInstall() {
+  const [status, setStatus] = useState<'checking' | 'installed' | 'not-installed' | 'installing' | 'error'>('checking')
+  const [version, setVersion] = useState('')
+  const [log, setLog] = useState('')
+
+  useEffect(() => {
+    if (!isElectron()) { setStatus('not-installed'); return }
+    const api = (window as any).electronAPI
+    api?.mimo?.detect?.().then((r: any) => {
+      if (r?.installed) { setStatus('installed'); setVersion(r.version || '') }
+      else { setStatus('not-installed') }
+    }).catch(() => setStatus('not-installed'))
+  }, [])
+
+  const install = async () => {
+    if (!isElectron()) return
+    setStatus('installing'); setLog('')
+    const api = (window as any).electronAPI
+    const unsub = api?.mimo?.onInstallProgress?.((d: any) => setLog(p => p + (d.stdout || d.stderr || '')))
+    try {
+      await api?.mimo?.install?.()
+      const r = await api?.mimo?.detect?.()
+      if (r?.installed) { setStatus('installed'); setVersion(r.version || '') }
+      else { setStatus('error') }
+    } catch (e: any) {
+      setStatus('error')
+      setLog(p => p + '\n' + (e?.message || 'Unknown error'))
+    } finally { unsub?.() }
+  }
+
+  if (status === 'checking') return <p className="text-[10px] text-mc-text-muted">检测 MiMo CLI...</p>
+  if (status === 'installed') return (
+    <div className="flex items-center gap-2 text-[10px] text-mc-success"><CheckCircle size={12} />MiMo CLI 已安装{version ? ` (v${version})` : ''}</div>
+  )
+  if (status === 'installing') return (
+    <div className="space-y-1">
+      <div className="flex items-center gap-2 text-[10px] text-mc-text-secondary"><Download size={12} className="animate-pulse text-mc-accent" />正在安装 MiMo CLI...</div>
+      {log ? <pre className="text-[9px] text-mc-text-muted bg-mc-bg rounded p-2 max-h-[60px] overflow-y-auto font-mono">{log.slice(-300)}</pre> : null}
+    </div>
+  )
+  if (status === 'error') return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-[10px] text-mc-error"><AlertCircle size={12} />安装失败</div>
+      {log ? <pre className="text-[9px] text-mc-text-muted bg-mc-bg rounded p-2 max-h-[80px] overflow-y-auto font-mono">{log.slice(-300)}</pre> : null}
+      <button onClick={install} className="text-[10px] text-mc-accent hover:underline">重试安装</button>
+    </div>
+  )
+  return (
+    <div className="space-y-2">
+      <p className="text-[10px] text-mc-text-muted">未安装 MiMo CLI — 安装后可获得完整 Agent 能力（工具调用、文件操作、技能系统等）</p>
+      <button onClick={install} className="flex items-center gap-1.5 text-[10px] px-3 py-1.5 rounded-lg bg-mc-accent text-white hover:opacity-90 transition-opacity">
+        <Download size={12} />安装 MiMo CLI
+      </button>
     </div>
   )
 }
