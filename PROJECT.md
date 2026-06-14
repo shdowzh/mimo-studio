@@ -539,7 +539,7 @@ onDone → store 写入完整消息 + idle 状态
 | 模型选择 | isActive 加载时固化，切换无响应 | 动态计算 currentProvider/currentModel，选中立即反映 |
 | 模型获取 | 仅硬编码 Provider 模板 | 并行从 Provider API 动态拉取 + 模板回退 |
 | API Key | 仅存本地 SQLite | 本地存储 + 自动同步到 MiMo Serve（PUT /auth） |
-| 聊天模式 | 无视觉区分 | 绿色/橙色横幅：Agent 模式 vs 直连模式 |
+| 聊天模式 | 无视觉区分 | 横幅标识：在线 Agent 模式 vs 离线纯文本模式 |
 | Fallback 对话 | 无上下文 | 注入 USER.md/MEMORY.md/Skills 作为 system prompt |
 | Provider | 仅 7 个模板 | +自定义 OpenAI 兼容 Provider（Ollama 等） |
 | 错误处理 | lastError 不显示 | 红色错误横幅 + 可关闭 |
@@ -564,23 +564,55 @@ onDone → store 写入完整消息 + idle 状态
 - `src/main.tsx` — xterm CSS 导入
 - `electron/services/files.cjs` — bootstrap 完整 workflow 模板
 
+### V3 → V4 稳定性与体验（2026-06-14）
+
+**核心变更：**
+
+| 模块 | 旧实现 | 新实现 |
+|------|--------|--------|
+| 进程退出 | `mimoServeProcess.kill()` | 确认弹窗 + `taskkill /f /t` 杀进程树，不再残留 |
+| 模型路由 | MiMo 模型=Agent，外部模型=直连 | 在线时所有模型统一经 MiMo Code Provider 系统 |
+| 空状态 | 显示"正在连接..."，快捷提示禁用 | 智能引导：安装 CLI 或配置 API Key |
+| MiMo CLI | 仅在引导中安装，跳过无法再装 | 设置 → MiMo Serve 区域常驻安装按钮 |
+| 崩溃 | terminalSessions 作用域错误导致退出崩溃 | 提升到模块顶层作用域 |
+| 制品 | 仅 NSIS 安装包 | NSIS 安装包 + Portable tar.xz 免安装版 |
+| 文件锁 | 退出后 mimo 进程残留锁住文件 | 退出时 `taskkill /f /t /im mimo.exe` 彻底清理 |
+
+**修改文件：**
+- `electron/main.cjs` — 关闭确认弹窗、taskkill 杀进程树、terminalSessions 作用域修复
+- `src/views/ChatView/index.tsx` — Agent 模式判定改为仅看 serverConnected
+- `src/views/ChatView/ChatHeader.tsx` — 模型分组标签统一
+- `src/views/ChatView/EmptyState.tsx` — 新用户引导（安装 CLI / 配置 Key）
+- `src/views/SettingsView/index.tsx` — MimoCliInstall 组件
+- `README.md` / `package.json` — 制品列表、构建目标更新
+- `.github/workflows/release.yml` — 全平台 CI
+- `~/.mimocode/MEMORY.md` — 引用 [[mimo-workflow]] 技能
+
 ---
 
 ## 10. 操作手册
 
 ### 10.1 安装与启动
 
-**方式一：免安装版**
-解压 `dist-electron\win-unpacked` 文件夹到任意位置，双击 `MiMo Studio.exe`。
+**方式一：NSIS 安装包**
+下载 `MiMo-Studio-Setup-1.0.0-win-x64.exe`，双击安装到 Program Files。
 
-**方式二：单文件版**
-直接运行 `dist-electron\MiMo Studio 1.0.0.exe`。
+**方式二：免安装版**
+下载 `MiMo-Studio-1.0.0-win-x64-Portable.tar.xz`，解压到任意位置：
+```bash
+tar xf MiMo-Studio-1.0.0-win-x64-Portable.tar.xz
+./win-unpacked/MiMo Studio.exe
+```
 
 **首次启动**
 1. 显示欢迎引导 → 点击"开始使用"
 2. 检测 MiMo CLI（如已安装则自动跳到下一步）
-3. 未安装可点击"安装 MiMo CLI"或"跳过"
-4. 确认清单 → "开始聊天"
+3. 推荐安装 MiMo CLI 以获得完整 Agent 能力
+4. 也可跳过，之后在空状态页或设置页随时安装
+
+**退出程序**
+- 点击 ✕ 按钮弹出确认对话框，防止误关
+- 确认退出后自动终止所有 Agent 和终端进程
 
 ### 10.2 基本使用
 
@@ -598,9 +630,10 @@ onDone → store 写入完整消息 + idle 状态
 
 **选择模型**
 - 顶栏右侧下拉：
-  - **MiMo Serve**（在线时）：服务器提供的所有模型
-  - **已配置的 Provider**（离线时）：已填 API Key 的外部模型
+  - 在线时所有模型统一经 MiMo Code，享受完整 Agent 能力
+  - 离线时仅显示已配置 API Key 的外部模型（纯文本模式）
   - 底部"管理 Provider 配置"→ 跳转到设置页
+- 设置 → Provider 中可随时安装 MiMo CLI
 
 ### 10.3 配置外部 AI Provider
 
