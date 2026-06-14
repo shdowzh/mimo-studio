@@ -575,7 +575,7 @@ onDone → store 写入完整消息 + idle 状态
 | 空状态 | 显示"正在连接..."，快捷提示禁用 | 智能引导：安装 CLI 或配置 API Key |
 | MiMo CLI | 仅在引导中安装，跳过无法再装 | 设置 → MiMo Serve 区域常驻安装按钮 |
 | 崩溃 | terminalSessions 作用域错误导致退出崩溃 | 提升到模块顶层作用域 |
-| 制品 | 仅 NSIS 安装包 | NSIS 安装包 + Portable tar.xz 免安装版 |
+| 制品 | 仅 NSIS 安装包 | NSIS 安装包 + Portable tar.xz 免安装版 + macOS DMG (x64/arm64) |
 | 文件锁 | 退出后 mimo 进程残留锁住文件 | 退出时 `taskkill /f /t /im mimo.exe` 彻底清理 |
 
 **修改文件：**
@@ -594,15 +594,22 @@ onDone → store 写入完整消息 + idle 状态
 
 ### 10.1 安装与启动
 
-**方式一：NSIS 安装包**
+**Windows — NSIS 安装包**
 下载 `MiMo-Studio-Setup-1.0.0-win-x64.exe`，双击安装到 Program Files。
 
-**方式二：免安装版**
+**Windows — 免安装版**
 下载 `MiMo-Studio-1.0.0-win-x64-Portable.tar.xz`，解压到任意位置：
 ```bash
 tar xf MiMo-Studio-1.0.0-win-x64-Portable.tar.xz
 ./win-unpacked/MiMo Studio.exe
 ```
+
+**macOS — DMG**
+下载对应架构的 DMG：
+- Apple Silicon (M1/M2/M3/M4)：`MiMo-Studio-1.0.0-mac-arm64.dmg`
+- Intel：`MiMo-Studio-1.0.0-mac-x64.dmg`
+
+双击打开 DMG → 将 MiMo Studio 拖入 Applications 文件夹。首次打开如提示"无法验证开发者"，请前往系统设置 → 隐私与安全性 → 点击"仍要打开"。
 
 **首次启动**
 1. 显示欢迎引导 → 点击"开始使用"
