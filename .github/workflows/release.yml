@@ -12,11 +12,14 @@ jobs:
     strategy:
       matrix:
         arch: [x64, arm64]
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: false
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - run: npm install
+      - run: npx vite build
       - name: Build macOS (${{ matrix.arch }})
         run: npx electron-builder --mac --${{ matrix.arch }}
       - uses: actions/upload-artifact@v4
@@ -35,6 +38,7 @@ jobs:
           sudo apt-get update && sudo apt-get install -y ruby
           sudo gem install fpm
       - run: npm install
+      - run: npx vite build
       - name: Build Linux
         run: npx electron-builder --linux AppImage deb
       - uses: actions/upload-artifact@v4
@@ -54,6 +58,7 @@ jobs:
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
       - run: npm install
+      - run: npx vite build
       - name: Build Windows
         run: npx electron-builder --win
       - uses: actions/upload-artifact@v4
