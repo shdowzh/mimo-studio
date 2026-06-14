@@ -120,4 +120,11 @@ export const settings = {
 
 // === MimoClient 重导出 ===
 
+// 窗口关闭时断开 SSE 连接
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    try { mimoClient.disconnect() } catch {}
+  })
+}
+
 export { mimoClient } from './mimoClient'

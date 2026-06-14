@@ -8,6 +8,7 @@ const { detect: mimoDetect, install: mimoInstall } = require('./services/mimoIns
 const { readMemory, writeMemory, readSkills, readSkill, writeSkill, deleteSkill, bootstrapDefaultFiles } = require('./services/files.cjs')
 
 let mainWindow
+let isQuitting = false
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -33,6 +34,13 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  // 窗口关闭时清理：杀终端→停服务→关数据库
+  mainWindow.on('close', () => {
+    if (isQuitting) return
+    isQuitting = true
+    cleanupAll()
   })
 
   if (process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER_URL) {
@@ -214,13 +222,28 @@ app.whenReady().then(() => {
   })
 })
 
+// 清理所有资源
+function cleanupAll() {
+  // 1. 杀掉所有终端子进程
+  for (const [id, session] of terminalSessions) {
+    try { if (session.alive) session.proc.kill() } catch {}
+    terminalSessions.delete(id)
+  }
+
+  // 2. 停止 mimo serve
+  try { stopMimoServe() } catch {}
+
+  // 3. 关闭数据库
+  try { closeDatabase() } catch {}
+}
+
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
+    cleanupAll()
     app.quit()
   }
 })
 
 app.on('before-quit', () => {
-  stopMimoServe()
-  closeDatabase()
+  cleanupAll()
 })
