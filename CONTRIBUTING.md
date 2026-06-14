@@ -11,7 +11,7 @@
 ## 开发环境
 
 ```bash
-git clone https://gitee.com/shdowzh/mimo-studio.git
+git clone git@gitee.com:shdowzh/mimo-studio.git
 cd mimo-studio
 npm install
 npm run electron:dev

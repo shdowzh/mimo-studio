@@ -1,0 +1,97 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  # ── macOS (x64 + arm64) ──────────────────────────────────
+  macos:
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm install
+      - name: Build macOS (${{ matrix.arch }})
+        run: npx electron-builder --mac --${{ matrix.arch }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: release/MiMo-Studio-*.dmg
+
+  # ── Linux (AppImage + deb) ───────────────────────────────
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: |
+          sudo apt-get update && sudo apt-get install -y ruby
+          sudo gem install fpm
+      - run: npm install
+      - name: Build Linux
+        run: npx electron-builder --linux AppImage deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: release/MiMo-Studio-*.AppImage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-deb
+          path: release/MiMo-Studio-*.deb
+
+  # ── Windows (NSIS) ───────────────────────────────────────
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - run: npm install
+      - name: Build Windows
+        run: npx electron-builder --win
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: release/MiMo-Studio-Setup-*.exe
+
+  # ── Gitee Release (aggregator) ───────────────────────────
+  gitee-release:
+    needs: [macos, linux, windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+
+      - name: Upload to Gitee Release
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          TAG="${TAG#v}"
+
+          # Find or create release
+          RELEASE_ID=$(curl -s "https://gitee.com/api/v5/repos/shdowzh/mimo-studio/releases?access_token=$GITEE_TOKEN" | \
+            python3 -c "import sys,json; releases=json.load(sys.stdin); print(next((r['id'] for r in releases if r['tag_name']==sys.argv[1]), ''))" "${{ github.ref_name }}")
+
+          if [ -z "$RELEASE_ID" ]; then
+            RELEASE_ID=$(curl -s -X POST "https://gitee.com/api/v5/repos/shdowzh/mimo-studio/releases?access_token=$GITEE_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"tag_name\":\"${{ github.ref_name }}\",\"name\":\"MiMo Studio $TAG\",\"body\":\"Release $TAG\"}" | \
+              python3 -c "import sys,json; print(json.load(sys.stdin)['id'])")
+          fi
+
+          echo "Release ID: $RELEASE_ID"
+
+          # Upload all assets
+          find . -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \) | while read f; do
+            echo "Uploading: $f"
+            curl -s -X POST \
+              "https://gitee.com/api/v5/repos/shdowzh/mimo-studio/releases/$RELEASE_ID/attach_files?access_token=$GITEE_TOKEN" \
+              -F "file=@$f"
+          done
