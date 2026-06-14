@@ -45,6 +45,7 @@ async function untrackSession(sessionID: string) {
 interface ChatState {
   // === mimo serve 连接状态 ===
   serverConnected: boolean
+  serverReady: boolean     // true = connected + skills API 可用（初始化完成）
   serverPort: number | null
   setServerPort: (port: number | null) => void
 
@@ -96,6 +97,7 @@ interface ChatState {
 export const useChatStore = create<ChatState>()((set, get) => ({
   // === 连接状态 ===
   serverConnected: false,
+  serverReady: false,
   serverPort: null,
   setServerPort: (port) => set({ serverPort: port }),
 
@@ -661,10 +663,28 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       })
     }))
 
-    // server.connected — 标记连接已建立，自动加载 session 列表
+    // server.connected — 标记连接已建立，等待初始化完成后加载 session 列表
     handlers.push(mimoClient.on('server.connected', () => {
       set({ serverConnected: true })
-      get().loadSessions()
+      // mimo serve 首次启动会执行初始化（auto dream 等），期间 skills API 不可用
+      // 轮询直到 skills API 可用，标记 serverReady
+      const checkReady = async (retries = 0) => {
+        if (retries > 30) { // 最多等 30 秒
+          set({ serverReady: true })
+          get().loadSessions()
+          return
+        }
+        try {
+          const skills = await mimoClient.listSkills()
+          // skills API 可用 = 初始化完成
+          set({ serverReady: true })
+          get().loadSessions()
+        } catch {
+          // 还在初始化，1 秒后重试
+          setTimeout(() => checkReady(retries + 1), 1000)
+        }
+      }
+      checkReady()
     }))
 
     // 返回 unsubscribe 函数

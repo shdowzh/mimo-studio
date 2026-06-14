@@ -14,6 +14,7 @@ export default function ChatView() {
   const {
     currentSessionID,
     serverConnected,
+    serverReady,
     currentProvider,
     messages,
     loadSessions,
@@ -23,9 +24,12 @@ export default function ChatView() {
     setLastError,
   } = useChatStore()
 
-  // 模式判断：mimo serve 在线 → Agent 模式（所有模型走 MiMo Code Provider 系统）
-  // mimo serve 离线 → 直连模式（fallback，纯文本无 Agent 能力）
-  const isAgentMode = serverConnected
+  // 模式判断：
+  // serverReady → Agent 模式（初始化完成，所有功能可用）
+  // serverConnected && !serverReady → 正在初始化（auto dream 等跑完）
+  // !serverConnected → 离线模式（纯文本 fallback）
+  const isAgentMode = serverReady
+  const isInitializing = serverConnected && !serverReady
   const isDirectMode = !serverConnected
 
   // 初始化：连接 mimo serve + 启动 SSE 监听（异步，不阻塞 UI）
@@ -40,7 +44,6 @@ export default function ChatView() {
 
       // 再连接 mimo serve（启动 SSE 流）
       connectToServer().then(connected => {
-        // 加载 session 列表
         if (connected) {
           loadSessions()
         }
@@ -72,8 +75,16 @@ export default function ChatView() {
       <div className="flex-1 flex flex-col min-w-0">
         <ChatHeader />
 
+        {/* 初始化中横幅 */}
+        {isInitializing && (
+          <div className="px-3 py-1 border-b flex items-center gap-2 text-[10px] bg-blue-500/8 border-blue-500/20 text-blue-500">
+            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-blue-500 animate-pulse" />
+            <span>正在初始化 MiMo 服务...</span>
+          </div>
+        )}
+
         {/* 模式横幅 */}
-        {!showEmpty && (
+        {!showEmpty && !isInitializing && (
           <div className={`px-3 py-1 border-b flex items-center gap-2 text-[10px] ${
             isAgentMode
               ? 'bg-green-500/8 border-green-500/20 text-green-600'

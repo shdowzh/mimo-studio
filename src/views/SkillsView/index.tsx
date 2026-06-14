@@ -2,6 +2,7 @@
 // 服务端自动发现：compose 内置技能 + 用户目录 + 项目目录技能
 
 import { useState, useEffect } from 'react'
+import { useChatStore } from '@/stores/chatStore'
 import { isElectron, getAPI } from '@/lib/ipc'
 import { mimoClient } from '@/lib/mimoClient'
 import { Sparkles, Plus, FileCode, Trash2, BookOpen, Edit, EyeOff, Download, Loader2 } from 'lucide-react'
@@ -25,6 +26,16 @@ export default function SkillsView() {
 
   useEffect(() => {
     loadSkills()
+  }, [])
+
+  // 当 serverReady 变为 true 时重新加载技能（首次初始化完成后）
+  useEffect(() => {
+    const unsub = useChatStore.subscribe((state, prev) => {
+      if (state.serverReady && !prev.serverReady) {
+        loadSkills()
+      }
+    })
+    return unsub
   }, [])
 
   const loadSkills = async () => {

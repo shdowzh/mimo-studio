@@ -16,6 +16,7 @@ const QUICK_PROMPTS = [
 export default function EmptyState() {
   const sendMessage = useChatStore((s) => s.sendMessage)
   const serverConnected = useChatStore((s) => s.serverConnected)
+  const serverReady = useChatStore((s) => s.serverReady)
   const [hasApiKeys, setHasApiKeys] = useState(false)
   const [checking, setChecking] = useState(true)
 
@@ -28,7 +29,7 @@ export default function EmptyState() {
     }).catch(() => { setChecking(false) })
   }, [])
 
-  const canChat = serverConnected || hasApiKeys
+  const canChat = serverReady || hasApiKeys
 
   // 需要用户操作的状态
   if (!checking && !canChat) {
@@ -82,11 +83,13 @@ export default function EmptyState() {
             MiMo Studio
           </div>
           <p className="text-xs text-mc-text-muted">
-            {serverConnected
+            {serverReady
               ? 'AI 编码助手 · Agent 自动执行任务'
-              : hasApiKeys
-                ? '离线模式 — 纯文本聊天（无 Agent 能力）'
-                : '正在连接 MiMo Server...'}
+              : serverConnected
+                ? '正在初始化 MiMo 服务...'
+                : hasApiKeys
+                  ? '离线模式 — 纯文本聊天（无 Agent 能力）'
+                  : '正在连接 MiMo Server...'}
           </p>
         </div>
 
