@@ -9,3 +9,5 @@ Thumbs.db
 *.local
 .env
 .env.*
+.idea/
+.npmrc

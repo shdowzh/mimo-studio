@@ -149,7 +149,7 @@ Message
 ## 5. 目录结构
 
 ```
-mimo-chat/
+mimo-studio/
 ├── electron/                    # Electron 主进程
 │   ├── main.cjs                 # 入口：窗口创建、IPC 注册、server 管理
 │   ├── preload.cjs              # contextBridge：安全暴露 IPC API
@@ -529,6 +529,40 @@ onDone → store 写入完整消息 + idle 状态
 - `src/config/models.ts` — 被 providerTemplates 替代
 - `src/config/theme.ts` — inline 到 themeStore
 - `src/views/ChatView/AddProviderModal.tsx` — 合并到 SettingsView
+
+### V2 → V3 功能完善（2026-06-14）
+
+**核心变更：**
+
+| 模块 | 旧实现 | 新实现 |
+|------|--------|--------|
+| 模型选择 | isActive 加载时固化，切换无响应 | 动态计算 currentProvider/currentModel，选中立即反映 |
+| 模型获取 | 仅硬编码 Provider 模板 | 并行从 Provider API 动态拉取 + 模板回退 |
+| API Key | 仅存本地 SQLite | 本地存储 + 自动同步到 MiMo Serve（PUT /auth） |
+| 聊天模式 | 无视觉区分 | 绿色/橙色横幅：Agent 模式 vs 直连模式 |
+| Fallback 对话 | 无上下文 | 注入 USER.md/MEMORY.md/Skills 作为 system prompt |
+| Provider | 仅 7 个模板 | +自定义 OpenAI 兼容 Provider（Ollama 等） |
+| 错误处理 | lastError 不显示 | 红色错误横幅 + 可关闭 |
+| 终端 | xterm CSS 未导入，PTY 报错 | 导入 CSS，PTY 失败静默回退本地终端 |
+| MiMo 模型 | 离线时消失 | 始终显示，离线标注"需连接" |
+
+**新建文件：**
+- `src/lib/providerModels.ts` — Provider API 动态模型获取
+- `scripts/release.cjs` — 跨平台发布脚本
+- `README.md` / `LICENSE` / `CONTRIBUTING.md` — 开源文档
+
+**修改文件：**
+- `src/views/ChatView/ChatHeader.tsx` — 动态 isActive、始终显示 MiMo、并行加载
+- `src/views/ChatView/index.tsx` — 模式横幅、错误显示
+- `src/lib/directChat.ts` — 模板 Provider 支持、Anthropic system prompt
+- `src/lib/mimoClient.ts` — setAuth/removeAuth API
+- `src/lib/api.ts` — 连接时自动同步 Key
+- `src/stores/chatStore.ts` — 发消息前同步 Key、错误恢复、Memory+Skill 注入
+- `src/stores/uiStore.ts` — settingsTab 状态
+- `src/views/SettingsView/index.tsx` — Key 同步、自定义 Provider
+- `src/views/TerminalView/index.tsx` — CSS 导入、PTY 回退、错误显示
+- `src/main.tsx` — xterm CSS 导入
+- `electron/services/files.cjs` — bootstrap 完整 workflow 模板
 
 ---
 
