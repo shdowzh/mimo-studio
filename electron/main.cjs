@@ -37,11 +37,26 @@ function createWindow() {
     mainWindow.show()
   })
 
-  // 窗口关闭时清理：杀终端→停服务→关数据库
-  mainWindow.on('close', () => {
+  // 窗口关闭：弹确认框 → 杀干净所有进程 → 关数据库
+  mainWindow.on('close', async (e) => {
     if (isQuitting) return
+    e.preventDefault()
+
+    const { response } = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      buttons: ['确定退出', '取消'],
+      defaultId: 0,
+      cancelId: 1,
+      title: '退出 MiMo Studio',
+      message: '确定要退出 MiMo Studio 吗？',
+      detail: '退出后将关闭所有 Agent 任务和终端会话。',
+    })
+
+    if (response === 1) return // 用户取消
+
     isQuitting = true
     cleanupAll()
+    app.quit()
   })
 
   if (process.env.NODE_ENV === 'development' || process.env.VITE_DEV_SERVER_URL) {
@@ -222,7 +237,7 @@ app.whenReady().then(() => {
   })
 })
 
-// 清理所有资源
+// 清理所有资源（退出时调用）
 function cleanupAll() {
   // 1. 杀掉所有终端子进程
   for (const [id, session] of terminalSessions) {
@@ -230,20 +245,27 @@ function cleanupAll() {
     terminalSessions.delete(id)
   }
 
-  // 2. 停止 mimo serve
+  // 2. 停止 mimo serve（先走优雅关闭）
   try { stopMimoServe() } catch {}
 
-  // 3. 关闭数据库
+  // 3. Windows 上强制杀干净残留 mimo 进程树
+  if (process.platform === 'win32') {
+    try {
+      require('child_process').execSync('taskkill /f /t /im mimo.exe 2>nul', { timeout: 5000, stdio: 'ignore' })
+    } catch {}
+  }
+
+  // 4. 关闭数据库
   try { closeDatabase() } catch {}
 }
 
 app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
+  if (!isQuitting && process.platform !== 'darwin') {
     cleanupAll()
     app.quit()
   }
 })
 
 app.on('before-quit', () => {
-  cleanupAll()
+  if (!isQuitting) cleanupAll()
 })
