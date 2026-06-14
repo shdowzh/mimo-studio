@@ -27,14 +27,21 @@ function getMimoServePort() {
 /**
  * 启动 mimo serve 作为本地代理
  * 返回端口号，失败返回 0
+ * 先快速检测 CLI 是否存在，不存在直接返回避免空等
  */
-function startMimoServe() {
-  return new Promise((resolve) => {
-    if (mimoServeProcess) {
-      resolve(mimoServePort)
-      return
-    }
+async function startMimoServe() {
+  if (mimoServeProcess) {
+    return mimoServePort
+  }
 
+  // 快速检测 CLI 是否存在，不存在直接返回
+  const cliInfo = await mimoDetect()
+  if (!cliInfo.installed) {
+    console.log('[streaming] MiMo CLI not installed, skipping serve')
+    return 0
+  }
+
+  return new Promise((resolve) => {
     const path = require('path')
     const fs = require('fs')
     const os = require('os')
@@ -96,14 +103,14 @@ function startMimoServe() {
       mimoServeProcess.stdout.on('data', checkReady)
       mimoServeProcess.stderr.on('data', checkReady)
 
-      // 超时
+      // 超时（缩短到 10 秒）
       setTimeout(() => {
         if (!mimoServeReady) {
           try { mimoServeProcess.kill() } catch {}
           mimoServeProcess = null
           resolve(0)
         }
-      }, 15000)
+      }, 10000)
 
     } catch (e) {
       resolve(0)

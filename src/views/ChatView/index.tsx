@@ -28,7 +28,7 @@ export default function ChatView() {
   const isAgentMode = serverConnected
   const isDirectMode = !serverConnected
 
-  // 初始化：连接 mimo serve + 启动 SSE 监听
+  // 初始化：连接 mimo serve + 启动 SSE 监听（异步，不阻塞 UI）
   useEffect(() => {
     let unsubSSE: (() => void) | undefined
 
@@ -39,12 +39,12 @@ export default function ChatView() {
       unsubSSE = initSSE()
 
       // 再连接 mimo serve（启动 SSE 流）
-      const connected = await connectToServer()
-
-      // 加载 session 列表
-      if (connected) {
-        loadSessions()
-      }
+      connectToServer().then(connected => {
+        // 加载 session 列表
+        if (connected) {
+          loadSessions()
+        }
+      })
     }
     init()
 

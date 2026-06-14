@@ -8,6 +8,7 @@ import { isElectron, getAPI } from './ipc'
 /**
  * 连接到 mimo serve
  * 由 ChatView 在启动时调用
+ * 非阻塞：尽快返回，连接状态通过 onConnectionChange 回调通知
  */
 export async function connectToServer(): Promise<boolean> {
   if (!isElectron()) {
@@ -23,45 +24,30 @@ export async function connectToServer(): Promise<boolean> {
       console.log(`[API] Server already running on port ${status.port}`)
       mimoClient.connect(status.port, '', (connected) => {
         console.log(`[API] MimoClient connection: ${connected}`)
+        if (connected) syncKeysToServer()
       })
-      await waitForConnection(5000)
+      await waitForConnection(3000)
       if (mimoClient.isConnected) {
         console.log('[API] Connected to existing server')
-        syncKeysToServer()
         return true
       }
       console.log('[API] Existing server not responding, will try to restart')
     }
 
-    // 2. 启动 server
+    // 2. 启动 server（异步，不阻塞 UI）
     console.log('[API] Starting mimo serve...')
-    const result = await getAPI().mimo.startServer()
-    console.log(`[API] startServer result: port=${result.port}`)
-    if (result.port > 0) {
-      mimoClient.connect(result.port, result.password, (connected) => {
-        console.log(`[API] MimoClient connection: ${connected}`)
-      })
-      await waitForConnection(10000)
-      const connected = mimoClient.isConnected
-      console.log(`[API] Connection status: ${connected}`)
-      if (connected) { syncKeysToServer(); return true }
-
-      // SSE 可能还没建立，但服务器已经在运行
-      // 尝试 health check
-      try {
-        const resp = await fetch(`http://127.0.0.1:${result.port}/global/health`)
-        if (resp.ok) {
-          console.log('[API] Health OK, SSE connecting...')
-          await waitForConnection(5000)
-          if (mimoClient.isConnected) syncKeysToServer()
-          return mimoClient.isConnected
-        }
-      } catch {
-        console.log('[API] Health check failed')
+    getAPI().mimo.startServer().then(result => {
+      console.log(`[API] startServer result: port=${result.port}`)
+      if (result.port > 0) {
+        mimoClient.connect(result.port, result.password, (connected) => {
+          console.log(`[API] MimoClient connection: ${connected}`)
+          if (connected) syncKeysToServer()
+        })
       }
-    }
+    }).catch(err => {
+      console.error('[API] startServer error:', err)
+    })
 
-    console.log('[API] Could not start/connect to mimo serve')
     return false
   } catch (err) {
     console.error('[API] connectToServer error:', err)

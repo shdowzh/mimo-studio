@@ -661,9 +661,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       })
     }))
 
-    // server.connected — 标记连接已建立
+    // server.connected — 标记连接已建立，自动加载 session 列表
     handlers.push(mimoClient.on('server.connected', () => {
       set({ serverConnected: true })
+      get().loadSessions()
     }))
 
     // 返回 unsubscribe 函数
