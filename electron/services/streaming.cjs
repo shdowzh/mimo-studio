@@ -27,18 +27,29 @@ function getMimoServePort() {
 /**
  * 启动 mimo serve 作为本地代理
  * 返回端口号，失败返回 0
- * 先快速检测 CLI 是否存在，不存在直接返回避免空等
+ * 先快速检测 CLI 是否存在，不存在则尝试从内置安装，再不行直接返回
  */
 async function startMimoServe() {
   if (mimoServeProcess) {
     return mimoServePort
   }
 
-  // 快速检测 CLI 是否存在，不存在直接返回
-  const cliInfo = await mimoDetect()
+  // 快速检测 CLI 是否存在
+  let cliInfo = await mimoDetect()
   if (!cliInfo.installed) {
-    console.log('[streaming] MiMo CLI not installed, skipping serve')
-    return 0
+    // 尝试从内置 CLI 安装
+    console.log('[streaming] MiMo CLI not found, trying bundled install...')
+    try {
+      await mimoInstall(null) // null = no eventSender, silent
+      cliInfo = await mimoDetect()
+    } catch (e) {
+      console.log('[streaming] Bundled install failed, skipping serve')
+      return 0
+    }
+    if (!cliInfo.installed) {
+      console.log('[streaming] MiMo CLI still not installed after install attempt, skipping serve')
+      return 0
+    }
   }
 
   return new Promise((resolve) => {

@@ -11,3 +11,6 @@ Thumbs.db
 .env.*
 .idea/
 .npmrc
+
+# Bundled CLI binaries (downloaded at build time)
+cli/

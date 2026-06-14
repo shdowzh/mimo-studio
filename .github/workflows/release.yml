@@ -20,6 +20,13 @@ jobs:
         with: { node-version: '22' }
       - run: npm install
       - run: npx vite build
+      - name: Download bundled MiMo CLI (${{ matrix.arch }})
+        run: |
+          mkdir -p cli/darwin-${{ matrix.arch }}
+          ASSET="mimocode-darwin-${{ matrix.arch }}.zip"
+          curl -L -o /tmp/mimo.zip "https://github.com/XiaomiMiMo/MiMo-Code/releases/latest/download/$ASSET"
+          unzip -o /tmp/mimo.zip -d cli/darwin-${{ matrix.arch }}
+          chmod +x cli/darwin-${{ matrix.arch }}/mimo
       - name: Build macOS (${{ matrix.arch }})
         run: npx electron-builder --mac --${{ matrix.arch }}
       - uses: actions/upload-artifact@v4
@@ -39,6 +46,12 @@ jobs:
           sudo gem install fpm
       - run: npm install
       - run: npx vite build
+      - name: Download bundled MiMo CLI (Linux x64)
+        run: |
+          mkdir -p cli/linux-x64
+          curl -L -o /tmp/mimo.tar.gz "https://github.com/XiaomiMiMo/MiMo-Code/releases/latest/download/mimocode-linux-x64.tar.gz"
+          tar -xzf /tmp/mimo.tar.gz -C cli/linux-x64
+          chmod +x cli/linux-x64/mimo
       - name: Build Linux
         run: npx electron-builder --linux AppImage deb
       - uses: actions/upload-artifact@v4
@@ -59,6 +72,12 @@ jobs:
         with: { node-version: '22' }
       - run: npm install
       - run: npx vite build
+      - name: Download bundled MiMo CLI (Windows x64)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path cli\windows-x64
+          Invoke-WebRequest -Uri "https://github.com/XiaomiMiMo/MiMo-Code/releases/latest/download/mimocode-windows-x64.zip" -OutFile mimo.zip
+          Expand-Archive -Path mimo.zip -DestinationPath cli\windows-x64 -Force
       - name: Build Windows
         run: npx electron-builder --win
       - uses: actions/upload-artifact@v4

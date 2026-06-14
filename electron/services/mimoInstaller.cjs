@@ -232,11 +232,67 @@ function installFromNpm(eventSender) {
 }
 
 /**
- * 智能安装：先尝试 GitHub 预编译二进制，失败再回退 npm
+ * 方式 0（最快）：从 app 内置 CLI 拷贝安装
+ * app 打包时将对应平台的 mimo 二进制放在 cli/ 目录下
+ */
+function installFromBundled(eventSender) {
+  return new Promise((resolve, reject) => {
+    const sendProgress = (msg) => {
+      if (eventSender && !eventSender.isDestroyed()) {
+        eventSender.send('mimo:installProgress', { stdout: msg })
+      }
+    }
+
+    const isWin = os.platform() === 'win32'
+    const arch = os.arch() // x64 / arm64
+    const binName = isWin ? 'mimo.exe' : 'mimo'
+
+    // 内置 CLI 目录结构: cli/<platform>-<arch>/mimo
+    const platformName = os.platform() === 'win32' ? 'windows' : os.platform() === 'darwin' ? 'darwin' : 'linux'
+    const archName = arch === 'arm64' ? 'arm64' : 'x64'
+    const bundledDir = path.join(__dirname, '../../cli', `${platformName}-${archName}`)
+    const bundledBin = path.join(bundledDir, binName)
+
+    if (!existsSync(bundledBin)) {
+      reject(new Error('本平台无内置 CLI'))
+      return
+    }
+
+    sendProgress('正在从内置 CLI 安装...')
+
+    const binDir = path.join(getMimoDataDir(), 'bin')
+    if (!existsSync(binDir)) mkdirSync(binDir, { recursive: true })
+
+    const destPath = path.join(binDir, binName)
+    try {
+      fs.copyFileSync(bundledBin, destPath)
+      if (!isWin) {
+        fs.chmodSync(destPath, 0o755)
+      }
+      sendProgress('MiMo CLI 安装完成！')
+      resolve()
+    } catch (err) {
+      reject(err)
+    }
+  })
+}
+
+/**
+ * 智能安装：内置 CLI → GitHub 预编译二进制 → npm
  */
 async function install(eventSender) {
+  // 1. 优先用内置 CLI（秒装，无需网络）
+  try {
+    await installFromBundled(eventSender)
+    return
+  } catch (e) {
+    // 无内置，继续下一步
+  }
+
+  // 2. GitHub 预编译二进制
   try {
     await installFromGitHub(eventSender)
+    return
   } catch (githubErr) {
     // GitHub 下载失败，尝试 npm
     if (eventSender && !eventSender.isDestroyed()) {
@@ -244,8 +300,10 @@ async function install(eventSender) {
         stdout: `GitHub 下载失败 (${githubErr.message})，尝试 npm 安装...`
       })
     }
-    await installFromNpm(eventSender)
   }
+
+  // 3. npm 全局安装（最后手段）
+  await installFromNpm(eventSender)
 }
 
 /**

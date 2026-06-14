@@ -31,7 +31,8 @@
     },
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "cli/**/*"
     ],
     "asar": true,
     "asarUnpack": [
