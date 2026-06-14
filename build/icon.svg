@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#6366F1"/>
+      <stop offset="100%" style="stop-color:#3B82F6"/>
+    </linearGradient>
+    <linearGradient id="bubble" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:0.95"/>
+      <stop offset="100%" style="stop-color:#E0E7FF;stop-opacity:0.95"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.25"/>
+    </filter>
+    <clipPath id="roundClip">
+      <rect x="0" y="0" width="512" height="512" rx="108" ry="108"/>
+    </clipPath>
+  </defs>
+
+  <!-- Rounded square background -->
+  <rect x="0" y="0" width="512" height="512" rx="108" ry="108" fill="url(#bg)"/>
+
+  <!-- Subtle decorative circles in background -->
+  <circle cx="380" cy="120" r="160" fill="white" opacity="0.06"/>
+  <circle cx="130" cy="400" r="120" fill="white" opacity="0.04"/>
+
+  <!-- Main chat bubble (larger, behind) -->
+  <g filter="url(#shadow)">
+    <path d="M130 170
+             C130 142, 152 120, 180 120
+             L332 120
+             C360 120, 382 142, 382 170
+             L382 290
+             C382 318, 360 340, 332 340
+             L240 340
+             L200 388
+             L210 340
+             L180 340
+             C152 340, 130 318, 130 290
+             Z"
+          fill="url(#bubble)"/>
+  </g>
+
+  <!-- Smaller chat bubble (in front, overlapping) -->
+  <g filter="url(#shadow)">
+    <path d="M180 230
+             C180 212, 194 198, 212 198
+             L352 198
+             C370 198, 384 212, 384 230
+             L384 320
+             C384 338, 370 352, 352 352
+             L310 352
+             L280 390
+             L290 352
+             L212 352
+             C194 352, 180 338, 180 320
+             Z"
+          fill="white" opacity="0.92"/>
+  </g>
+
+  <!-- Chat dots in main bubble -->
+  <circle cx="220" cy="230" r="14" fill="#6366F1" opacity="0.9"/>
+  <circle cx="262" cy="230" r="14" fill="#3B82F6" opacity="0.9"/>
+  <circle cx="304" cy="230" r="14" fill="#2563EB" opacity="0.9"/>
+
+  <!-- Chat lines in smaller bubble -->
+  <rect x="210" y="270" width="120" height="8" rx="4" fill="#6366F1" opacity="0.5"/>
+  <rect x="210" y="290" width="90" height="8" rx="4" fill="#3B82F6" opacity="0.4"/>
+  <rect x="210" y="310" width="110" height="8" rx="4" fill="#6366F1" opacity="0.3"/>
+</svg>

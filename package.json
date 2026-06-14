@@ -1,0 +1,94 @@
+{
+  "name": "mimo-studio",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "MiMo Studio — 基于 MiMo Code 的 AI Agent 桌面工作站，支持工具调用、文件操作、多模型切换",
+  "main": "electron/main.cjs",
+  "author": "MiMo Studio Contributors",
+  "license": "MIT",
+  "homepage": "https://gitee.com/mimo-studio/mimo-studio",
+  "repository": {
+    "type": "git",
+    "url": "https://gitee.com/mimo-studio/mimo-studio.git"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "electron:build": "vite build && electron-builder",
+    "electron:build:win": "vite build && electron-builder --win",
+    "electron:build:mac": "vite build && electron-builder --mac",
+    "electron:build:linux": "vite build && electron-builder --linux",
+    "electron:build:all": "vite build && electron-builder --win --mac --linux",
+    "release": "node scripts/release.cjs"
+  },
+  "build": {
+    "appId": "com.mimocode.studio",
+    "productName": "MiMo Studio",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "asar": false,
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "MiMo-Studio-Setup-${version}-win-x64.${ext}"
+    },
+    "mac": {
+      "target": [
+        { "target": "dmg", "arch": ["x64", "arm64"] }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "MiMo-Studio-${version}-mac-${arch}.${ext}",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": [
+        { "target": "AppImage", "arch": ["x64"] },
+        { "target": "deb", "arch": ["x64"] }
+      ],
+      "icon": "build/icon.png",
+      "artifactName": "MiMo-Studio-${version}-linux-${arch}.${ext}",
+      "category": "Development"
+    }
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.9.1",
+    "dompurify": "^3.4.10",
+    "lucide-react": "^1.18.0",
+    "marked": "^15.0.8",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-router-dom": "^7.17.0",
+    "react-syntax-highlighter": "^15.6.1",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0",
+    "xterm-addon-web-links": "^0.9.0",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12",
+    "@types/dompurify": "^3.2.0",
+    "@types/react": "^19.1.4",
+    "@types/react-dom": "^19.1.5",
+    "@types/react-syntax-highlighter": "^15.5.13",
+    "@vitejs/plugin-react": "^4.4.1",
+    "autoprefixer": "^10.4.21",
+    "concurrently": "^10.0.3",
+    "electron": "^35.2.1",
+    "electron-builder": "^26.0.12",
+    "postcss": "^8.5.4",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "wait-on": "^9.0.10"
+  }
+}
