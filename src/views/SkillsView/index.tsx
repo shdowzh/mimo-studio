@@ -131,6 +131,7 @@ export default function SkillsView() {
 
   return (
     <div className="flex flex-col h-full">
+      <div className="h-[36px] drag" />
       {/* Header with tabs */}
       <div className="flex items-center justify-between h-10 px-4 border-b border-mc-border-subtle">
         <div className="flex items-center gap-3">

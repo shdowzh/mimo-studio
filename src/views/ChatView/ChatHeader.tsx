@@ -144,7 +144,7 @@ export default function ChatHeader() {
     : ''
 
   return (
-    <div className="flex items-center justify-between h-10 px-3 border-b border-mc-border-subtle drag">
+    <div className="flex items-center justify-between px-3 border-b border-mc-border-subtle drag" style={{ paddingTop: '36px', height: '76px' }}>
       <div className="flex items-center gap-2 no-drag">
         {!useUIStore.getState().conversationListOpen && (
           <button onClick={toggleConversationList} className="p-1.5 text-mc-text-muted hover:text-mc-text hover:bg-mc-hover rounded transition-colors" title="展开对话列表">

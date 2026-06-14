@@ -128,6 +128,7 @@ export default function TerminalView() {
 
   return (
     <div className="flex flex-col h-full">
+      <div className="h-[36px] drag" />
       <div className="flex items-center h-8 px-3 border-b border-mc-border-subtle gap-2">
         <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${ptyReady ? 'bg-mc-success' : serverConnected ? 'bg-mc-warning' : 'bg-mc-text-muted'}`} />
         <span className="text-[10px] text-mc-text-muted truncate">

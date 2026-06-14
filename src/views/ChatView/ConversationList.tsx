@@ -31,9 +31,12 @@ export default function ConversationList() {
 
   return (
     <div className="w-conv-list flex flex-col border-r border-mc-border-subtle bg-mc-bg/50">
+      {/* macOS traffic light drag region */}
+      <div className="h-[36px] flex items-end px-3 drag">
+        <span className="text-xs font-medium text-mc-text-muted pb-1.5">对话</span>
+      </div>
       {/* Header */}
-      <div className="flex items-center justify-between px-3 h-10 border-b border-mc-border-subtle">
-        <span className="text-xs font-medium text-mc-text-muted">对话</span>
+      <div className="flex items-center justify-end px-3 h-9 border-b border-mc-border-subtle">
         <div className="flex items-center gap-0.5">
           <button
             onClick={handleNew}

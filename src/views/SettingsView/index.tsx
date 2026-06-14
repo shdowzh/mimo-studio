@@ -25,6 +25,7 @@ export default function SettingsView() {
 
   return (
     <div className="flex flex-col h-full">
+      <div className="h-[36px] drag" />
       <div className="flex items-center h-10 px-4 border-b border-mc-border-subtle">
         <div className="flex items-center gap-2">
           <SettingsIcon size={14} strokeWidth={1.5} className="text-mc-text-muted" />
