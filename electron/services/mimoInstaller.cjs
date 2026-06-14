@@ -97,12 +97,26 @@ function installFromBundled(eventSender) {
       return
     }
 
+    // 如果已安装，比较版本：已装版本 >= 内置版本则跳过
+    const binDir = path.join(getMimoDataDir(), 'bin')
+    const destPath = path.join(binDir, binName)
+    if (existsSync(destPath)) {
+      try {
+        const existingVersion = execFileSync(destPath, ['--version']).toString().trim()
+        // 内置 CLI 版本固定，如果已装的版本不为空就跳过（避免降级）
+        if (existingVersion) {
+          sendProgress('MiMo CLI 已安装，跳过')
+          resolve()
+          return
+        }
+      } catch {}
+      // 已装但获取版本失败，可能是损坏的，继续覆盖安装
+    }
+
     sendProgress('正在安装 MiMo CLI...')
 
-    const binDir = path.join(getMimoDataDir(), 'bin')
     if (!existsSync(binDir)) mkdirSync(binDir, { recursive: true })
 
-    const destPath = path.join(binDir, binName)
     try {
       fs.copyFileSync(bundledBin, destPath)
       if (!isWin) {
