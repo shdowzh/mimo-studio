@@ -3,8 +3,8 @@ const fs = require('fs')
 const path = require('path')
 const os = require('os')
 const { initDatabase, getDb, closeDatabase } = require('./services/database.cjs')
-const { startMimoServe, stopMimoServe, isMimoServeRunning, getMimoServePort } = require('./services/streaming.cjs')
-const { detect: mimoDetect, install: mimoInstall } = require('./services/mimoInstaller.cjs')
+const { startMimoServe, stopMimoServe, isMimoServeRunning, getMimoServePort, getServeMode } = require('./services/streaming.cjs')
+const { detect: mimoDetect, install: mimoInstall, autoInstallIfNeeded } = require('./services/mimoInstaller.cjs')
 const { readMemory, writeMemory, readSkills, readSkill, writeSkill, deleteSkill, bootstrapDefaultFiles } = require('./services/files.cjs')
 
 let mainWindow
@@ -78,7 +78,7 @@ function setupIPC() {
   })
 
   ipcMain.handle('mimo:serverStatus', async () => {
-    return { running: isMimoServeRunning(), port: getMimoServePort() }
+    return { running: isMimoServeRunning(), port: getMimoServePort(), mode: getServeMode() }
   })
 
   // === Mimo CLI 检测/安装 ===
@@ -229,6 +229,11 @@ app.whenReady().then(() => {
   bootstrapDefaultFiles()
   setupIPC()
   createWindow()
+
+  // 首次启动时自动安装 MiMo CLI（如果缺失），非阻塞
+  autoInstallIfNeeded(mainWindow).catch(err => {
+    console.error('[main] Auto-install failed:', err.message)
+  })
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

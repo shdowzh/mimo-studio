@@ -619,6 +619,56 @@ onDone → store 写入完整消息 + idle 状态
 - `.github/workflows/release.yml` — 三平台下载 CLI + vite build + 跳过 >100MB Gitee 上传
 - `.gitignore` — 排除 `cli/` 目录
 
+### V5 → V6 稳定性与体验优化（2026-06-16）
+
+**Bug 修复：**
+
+| 模块 | 问题 | 修复 |
+|------|------|------|
+| directChat Fallback | `abortController` 未定义导致消息发送必然崩溃 | 模块级 `currentAbortController`，`sendMessage` 声明 + `finally` 清理，`abortSession` 优先 abort fallback |
+| CLI 安装 | `execFileSync` 未导入导致版本检测静默失败 | 补充 import |
+| CLI 安装 | `streaming.cjs` 调用 `mimoInstall(null)` 丢弃所有进度消息 | 新增 `installSilent()` 函数，控制台输出安装日志 |
+| 连接状态 | `mimoClient.connect()` 覆盖 `onConnectionChange` 导致 zustand 不同步 | 改为 `Set` 多回调模式，`notifyConnectionChange()` 遍历通知 |
+| 自动安装 | `autoInstallIfNeeded` 定义但无人调用 | `main.cjs` 启动时调用；`preload.cjs` 桥接 `mimo:status` 事件 |
+| 初始化超时 | `serverReady` 30s 盲超时设 true 导致虚假就绪 | 超时设 `initError` 错误状态 + `retryInit()` 重试 |
+| 连接重试 | `connectToServer` 一次失败永久离线 | 3 次指数退避重试（1s/2s/4s）+ EmptyState 重试按钮 |
+| 设置页 | `serverOk` 一次性检查，服务器上线后不更新 | 改用 zustand 响应式订阅 `serverConnected` / `serverReady` |
+
+**体验优化：**
+
+| 模块 | 旧实现 | 新实现 |
+|------|--------|--------|
+| 技能商店 | 特色卡片点击打开空 URL 输入弹窗 | 直接下载（15s 超时 + YAML 验证 + Toast 通知） |
+| CLI 安装进度 | 原始文本 + pulse 动画 | 百分比解析 → 真实进度条 + 步骤标签 |
+| CLI 下载可靠性 | 每源无重试无整体超时（累计可达 10 分钟） | 每源 2 次重试 + 5 分钟整体超时 + `Promise.race` |
+| 安装后体验 | 安装完无反应，用户需手动切换 | 安装成功自动调用 `connectToServer()` + 显示连接过渡状态 |
+| 安装代码 | SettingsView 和 Onboarding 两套重复实现 | 提取共享 `useMimoInstaller` Hook |
+| Windows 安装 | `oneClick: true` 无法选目录 | `oneClick: false` + `allowToChangeInstallationDirectory: true` |
+| 服务端嵌入 | 仅 spawn 模式 | 新增 `startEmbedded()` 支持直接 import opencode 编译产物（`opencode-dist/`），spawn 保留为 fallback |
+
+**新建文件：**
+- `src/hooks/useMimoInstaller.ts` — 共享 CLI 安装 Hook（状态检测/下载进度/自动重试/安装后连接）
+- `scripts/build-opencode.cjs` — 从 MiMo Code fork 编译嵌入模式服务端
+
+**修改文件：**
+- `electron/services/streaming.cjs` — 嵌入模式 + spawn fallback 双模式重构 + `installSilent`
+- `electron/services/mimoInstaller.cjs` — 修复 `execFileSync` + `installSilent` + 下载重试 + 整体超时
+- `electron/main.cjs` — `autoInstallIfNeeded` 调用 + `getServeMode` 导入
+- `electron/preload.cjs` — 桥接 `mimo:status` 事件
+- `src/stores/chatStore.ts` — `abortController` + `initError` + `retryInit` + `serveMode`
+- `src/lib/mimoClient.ts` — `onConnectionChange` 多回调模式
+- `src/lib/api.ts` — 连接重试 + 响应式 `serveMode` 同步 + 移除旧 monkey-patch
+- `src/lib/ipc.ts` — `serverStatus.mode` / `onStatus` 类型
+- `src/App.tsx` — 改用 `mimoClient.onConnectionChange()`
+- `src/views/ChatView/index.tsx` — `initError` 横幅 + 重试按钮 + `serveMode` 标识
+- `src/views/ChatView/EmptyState.tsx` — `initError` 提示 + 重试连接按钮
+- `src/views/SettingsView/index.tsx` — 响应式 `serverOk` + 进度条 + `useMimoInstaller`
+- `src/views/SkillsView/index.tsx` — 直接下载 + 超时验证 + Toast
+- `src/components/Onboarding/index.tsx` — 进度条 + `useMimoInstaller`
+- `package.json` — NSIS 安装目录选择 + `opencode:build` 脚本 + `opencode-dist/` 打包配置
+- `scripts/release.cjs` — 构建前尝试编译 opencode
+- `.gitignore` — 排除 `opencode-dist/`
+
 ---
 
 ## 10. 操作手册

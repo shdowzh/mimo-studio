@@ -14,3 +14,7 @@ Thumbs.db
 
 # Bundled CLI binaries (downloaded at build time)
 cli/
+
+# Compiled opencode server for embedded mode (built from MiMo Code fork)
+opencode-dist/
+.mimocode/

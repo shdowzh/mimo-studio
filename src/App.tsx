@@ -5,7 +5,7 @@ import Onboarding from '@/components/Onboarding'
 import { useUIStore } from '@/stores/uiStore'
 import { useThemeStore } from '@/stores/themeStore'
 import { isElectron, getAPI } from '@/lib/ipc'
-import { registerChatStoreSetter } from '@/lib/api'
+import { mimoClient } from '@/lib/mimoClient'
 import { useChatStore } from '@/stores/chatStore'
 import ChatView from '@/views/ChatView'
 import TerminalView from '@/views/TerminalView'
@@ -30,11 +30,12 @@ function App() {
   const CurrentView = viewMap[currentView]
   const [showOnboarding, setShowOnboarding] = useState(false)
 
-  // 注册 chatStore 的 serverConnected setter
+  // 注册 mimoClient 连接状态 → zustand store 的同步
   useEffect(() => {
-    registerChatStoreSetter((connected: boolean) => {
+    const unsub = mimoClient.onConnectionChange((connected) => {
       useChatStore.setState({ serverConnected: connected })
     })
+    return () => { unsub() }
   }, [])
 
   // 加载保存的主题

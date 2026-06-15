@@ -1,75 +1,38 @@
 import { useState, useEffect } from 'react'
 import { isElectron, getAPI } from '@/lib/ipc'
-import { MessageSquare, Download, CheckCircle, AlertCircle, ChevronRight, SkipForward } from 'lucide-react'
+import { MessageSquare, Download, CheckCircle, AlertCircle, ChevronRight, SkipForward, Loader2 } from 'lucide-react'
 import Button from '@/components/ui/Button'
+import { useMimoInstaller } from '@/hooks/useMimoInstaller'
 
 interface OnboardingProps {
   onComplete: () => void
 }
 
 type Step = 1 | 2 | 3
-type InstallStatus = 'checking' | 'installed' | 'not-installed' | 'installing' | 'error'
 
 export default function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState<Step>(1)
-  const [mimoStatus, setMimoStatus] = useState<InstallStatus>('checking')
-  const [mimoVersion, setMimoVersion] = useState('')
-  const [installLog, setInstallLog] = useState('')
   const [skipped, setSkipped] = useState(false)
+  const { status: mimoStatus, version: mimoVersion, log: installLog, progress, stepName, install: installMimo, retry: retryMimo } = useMimoInstaller(false)
 
   // Step 2: 检测 mimo CLI
   useEffect(() => {
     if (step !== 2) return
-    if (!isElectron()) {
-      setMimoStatus('not-installed')
-      return
-    }
+    if (!isElectron()) return
 
     const api = (window as any).electronAPI
-
-    const checkMimo = async () => {
-      try {
-        const result = await api?.mimo?.detect?.()
+    api?.mimo?.detect?.()
+      .then((result: any) => {
         if (result?.installed) {
-          setMimoStatus('installed')
-          setMimoVersion(result.version || '')
-          // 自动跳到下一步
+          // 已安装自动跳下一步
           setTimeout(() => setStep(3), 800)
-        } else {
-          setMimoStatus('not-installed')
         }
-      } catch {
-        setMimoStatus('not-installed')
-      }
-    }
-
-    checkMimo()
+      })
+      .catch(() => {})
   }, [step])
 
   const handleInstallMimo = async () => {
-    if (!isElectron()) return
-    setMimoStatus('installing')
-    setInstallLog('')
-
-    const api = (window as any).electronAPI
-
-    const unsub = api?.mimo?.onInstallProgress?.((data: any) => {
-      setInstallLog(prev => prev + (data.stdout || data.stderr || ''))
-    })
-
-    try {
-      await api?.mimo?.install?.()
-      const result = await api?.mimo?.detect?.()
-      if (result?.installed) {
-        setMimoStatus('installed')
-        setMimoVersion(result.version || '')
-      }
-    } catch (err: any) {
-      setMimoStatus('error')
-      setInstallLog(prev => prev + '\n安装失败: ' + (err?.message || '未知错误'))
-    } finally {
-      unsub?.()
-    }
+    await installMimo()
   }
 
   const handleSkip = () => {
@@ -175,14 +138,31 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               {mimoStatus === 'installing' && (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 justify-center">
-                    <Download size={14} className="text-mc-accent animate-pulse" />
+                    {progress === null ? (
+                      <Download size={14} className="text-mc-accent animate-pulse" />
+                    ) : (
+                      <span className="text-sm font-medium text-mc-accent">{progress}%</span>
+                    )}
                     <span className="text-xs text-mc-text-secondary">正在安装...</span>
                   </div>
+                  {stepName && <p className="text-[10px] text-mc-text-muted text-center">{stepName}</p>}
+                  {progress !== null && (
+                    <div className="w-full bg-mc-elevated rounded-full h-1.5 overflow-hidden">
+                      <div className="bg-mc-accent h-1.5 rounded-full transition-all duration-300" style={{ width: `${Math.max(progress, 5)}%` }} />
+                    </div>
+                  )}
                   {installLog && (
                     <pre className="text-[9px] text-mc-text-muted bg-mc-bg rounded p-2 max-h-[60px] overflow-y-auto text-left font-mono">
                       {installLog.slice(-200)}
                     </pre>
                   )}
+                </div>
+              )}
+
+              {mimoStatus === 'connecting' && (
+                <div className="flex items-center gap-2 justify-center">
+                  <Loader2 size={14} className="text-mc-accent animate-spin" />
+                  <span className="text-xs text-mc-text-secondary">CLI 已安装，正在连接 MiMo 服务...</span>
                 </div>
               )}
 
@@ -197,7 +177,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                       {installLog.slice(-200)}
                     </pre>
                   )}
-                  <Button variant="secondary" size="sm" onClick={handleInstallMimo} className="w-full">
+                  <Button variant="secondary" size="sm" onClick={retryMimo} className="w-full">
                     重试安装
                   </Button>
                 </div>

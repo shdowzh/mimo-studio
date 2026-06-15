@@ -21,6 +21,7 @@
     "electron:build:mac": "vite build && electron-builder --mac",
     "electron:build:linux": "vite build && electron-builder --linux",
     "electron:build:all": "vite build && electron-builder --win --mac --linux",
+    "opencode:build": "node scripts/build-opencode.cjs",
     "release": "node scripts/release.cjs"
   },
   "build": {
@@ -32,11 +33,13 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
-      "cli/**/*"
+      "cli/**/*",
+      "opencode-dist/**/*"
     ],
     "asar": true,
     "asarUnpack": [
-      "node_modules/better-sqlite3/**"
+      "node_modules/better-sqlite3/**",
+      "opencode-dist/**"
     ],
     "win": {
       "target": [
@@ -44,6 +47,14 @@
       ],
       "icon": "build/icon.ico",
       "artifactName": "MiMo-Studio-Setup-${version}-win-x64.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "installerHeaderIcon": "build/icon.ico"
     },
     "mac": {
       "target": [

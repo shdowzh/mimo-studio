@@ -28,9 +28,18 @@ export class MimoClient {
   private heartbeatTimer: ReturnType<typeof setTimeout> | null = null
   private connecting = false
   private lastEventTime = 0
-  private onConnectionChange?: (connected: boolean) => void
+  private connectionChangeHandlers = new Set<(connected: boolean) => void>()
 
   // === 生命周期 ===
+
+  /**
+   * 注册连接状态变更回调（可多次调用，所有回调都会触发）
+   * @returns 取消订阅函数
+   */
+  onConnectionChange(cb: (connected: boolean) => void): () => void {
+    this.connectionChangeHandlers.add(cb)
+    return () => this.connectionChangeHandlers.delete(cb)
+  }
 
   /**
    * 连接到 mimo serve
@@ -39,7 +48,9 @@ export class MimoClient {
   connect(port: number, password?: string, onConnectionChange?: (connected: boolean) => void) {
     this.baseUrl = `http://127.0.0.1:${port}`
     this.password = password || ''
-    this.onConnectionChange = onConnectionChange
+    if (onConnectionChange) {
+      this.connectionChangeHandlers.add(onConnectionChange)
+    }
     this.startSSE()
   }
 
@@ -337,7 +348,7 @@ export class MimoClient {
 
       this.connecting = false
       this.connected = true
-      this.onConnectionChange?.(true)
+      this.notifyConnectionChange(true)
       this.resetHeartbeat()
 
       const reader = response.body!.getReader()
@@ -370,7 +381,7 @@ export class MimoClient {
       // 流结束 — 非主动断开，尝试重连
       if (this.connected) {
         this.connected = false
-        this.onConnectionChange?.(false)
+        this.notifyConnectionChange(false)
         this.scheduleReconnect()
       }
     } catch (err: unknown) {
@@ -382,7 +393,7 @@ export class MimoClient {
       console.error('[MimoClient] SSE error:', err)
       this.connecting = false
       this.connected = false
-      this.onConnectionChange?.(false)
+      this.notifyConnectionChange(false)
       this.scheduleReconnect()
     }
   }
@@ -409,6 +420,12 @@ export class MimoClient {
     this.emitPayload(payload, event)
   }
 
+  private notifyConnectionChange(connected: boolean) {
+    for (const handler of this.connectionChangeHandlers) {
+      try { handler(connected) } catch (e) { console.error('[MimoClient] connection handler error:', e) }
+    }
+  }
+
   private emitPayload(payload: SSEEventPayload, event: GlobalSSEEvent) {
     // 分发给特定类型的处理器
     const typeHandlers = this.handlers.get(payload.type)
@@ -432,7 +449,7 @@ export class MimoClient {
       if (this.connected && Date.now() - this.lastEventTime > 15_000) {
         console.warn('[MimoClient] Heartbeat timeout, reconnecting...')
         this.connected = false
-        this.onConnectionChange?.(false)
+        this.notifyConnectionChange(false)
         if (this.abortController) this.abortController.abort()
         this.scheduleReconnect()
       }

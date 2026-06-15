@@ -22,6 +22,8 @@ import type {
 // === 本地 Session 追踪 ===
 const MY_SESSIONS_KEY = 'mySessionIds'
 
+let currentAbortController: AbortController | null = null
+
 async function getMySessionIds(): Promise<Set<string>> {
   if (!isElectron()) return new Set()
   const raw = await getAPI().settings.get(MY_SESSIONS_KEY)
@@ -47,6 +49,7 @@ interface ChatState {
   serverConnected: boolean
   serverReady: boolean     // true = connected + skills API 可用（初始化完成）
   serverPort: number | null
+  serveMode: string        // 'embedded' | 'spawn' | 'unknown'
   setServerPort: (port: number | null) => void
 
   // === 当前 Session ===
@@ -72,6 +75,7 @@ interface ChatState {
   // === 错误 ===
   lastError: string | null
   setLastError: (error: string | null) => void
+  initError: string | null  // 初始化超时等不可恢复错误
 
   // === 当前模型/Provider ===
   currentProvider: string
@@ -92,6 +96,7 @@ interface ChatState {
 
   // === SSE 事件处理 ===
   initSSE: () => () => void  // 返回 unsubscribe 函数
+  retryInit: () => void
 }
 
 export const useChatStore = create<ChatState>()((set, get) => ({
@@ -99,6 +104,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   serverConnected: false,
   serverReady: false,
   serverPort: null,
+  serveMode: 'unknown',
   setServerPort: (port) => set({ serverPort: port }),
 
   // === 当前 Session ===
@@ -124,6 +130,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   // === 错误 ===
   lastError: null,
   setLastError: (error) => set({ lastError: error }),
+  initError: null,
 
   // === 当前模型/Provider ===
   currentProvider: 'mimo',
@@ -165,6 +172,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   sendMessage: async (text: string) => {
     const state = get()
     if (!text.trim()) return
+
+    // 创建 AbortController 用于中止（Agent 模式 + Fallback 模式共用）
+    const abortController = new AbortController()
+    currentAbortController = abortController
 
     let sessionID = state.currentSessionID
 
@@ -374,10 +385,16 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           abortController.signal,
         )
       } catch (err) {
-        set({
-          lastError: `发送消息失败: ${err instanceof Error ? err.message : String(err)}`,
-          sessionStatus: { ...get().sessionStatus, [sessionID!]: { type: 'idle' } },
-        })
+        if (err instanceof Error && err.name === 'AbortError') {
+          // 用户主动中止，不报错
+        } else {
+          set({
+            lastError: `发送消息失败: ${err instanceof Error ? err.message : String(err)}`,
+            sessionStatus: { ...get().sessionStatus, [sessionID!]: { type: 'idle' } },
+          })
+        }
+      } finally {
+        currentAbortController = null
       }
 
       return
@@ -385,6 +402,21 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   abortSession: async () => {
     const state = get()
+
+    // 先中止 directChat fallback（如果有）
+    if (currentAbortController) {
+      currentAbortController.abort()
+      currentAbortController = null
+      // 恢复 session 状态
+      if (state.currentSessionID) {
+        set((s) => ({
+          sessionStatus: { ...s.sessionStatus, [state.currentSessionID!]: { type: 'idle' } },
+        }))
+      }
+      return
+    }
+
+    // 再中止 Agent 模式的 session
     if (!state.currentSessionID) return
     try {
       await mimoClient.abortSession(state.currentSessionID)
@@ -670,14 +702,15 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       // 轮询直到 skills API 可用，标记 serverReady
       const checkReady = async (retries = 0) => {
         if (retries > 30) { // 最多等 30 秒
-          set({ serverReady: true })
+          set({ initError: '初始化超时 — MiMo 服务未能在 30 秒内就绪，请检查网络连接后重试' })
+          // 仍然尝试加载 sessions（可能会失败）
           get().loadSessions()
           return
         }
         try {
           const skills = await mimoClient.listSkills()
           // skills API 可用 = 初始化完成
-          set({ serverReady: true })
+          set({ serverReady: true, initError: null })
           get().loadSessions()
         } catch {
           // 还在初始化，1 秒后重试
@@ -691,5 +724,23 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     return () => {
       handlers.forEach(unsub => unsub())
     }
+  },
+
+  retryInit: () => {
+    set({ initError: null })
+    const checkReady = async (retries = 0) => {
+      if (retries > 30) {
+        set({ initError: '初始化超时 — MiMo 服务未能在 30 秒内就绪，请检查网络连接后重试' })
+        return
+      }
+      try {
+        await mimoClient.listSkills()
+        set({ serverReady: true, initError: null })
+        get().loadSessions()
+      } catch {
+        setTimeout(() => checkReady(retries + 1), 1000)
+      }
+    }
+    checkReady()
   },
 }))

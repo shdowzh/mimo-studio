@@ -7,7 +7,7 @@
 // 5. Gitee 失败 → GitHub Releases
 // 6. 都失败 → npm install -g（需要 Node.js）
 
-const { exec, execFile } = require('child_process')
+const { exec, execFile, execFileSync } = require('child_process')
 const fs = require('fs')
 const path = require('path')
 const os = require('os')
@@ -251,42 +251,74 @@ function installFromNpm(eventSender) {
 }
 
 /**
- * 智能安装：内置 → Gitee 镜像 → GitHub → npm
+ * 智能安装：内置 → Gitee 镜像（重试2次）→ GitHub（重试2次）→ npm
+ * 整体超时 5 分钟
  */
 async function install(eventSender) {
-  // 1. 内置 CLI（秒装，无需网络）
-  try {
-    await installFromBundled(eventSender)
-    return
-  } catch (e) {
-    // 无内置，继续
-  }
-
-  // 2. Gitee 镜像（国内快）
-  const assetName = getAssetName()
-  const giteeUrl = `${GITEE_RELEASE_BASE}/${CLI_VERSION}/${assetName}`
-  try {
-    await installFromUrl(giteeUrl, eventSender)
-    return
-  } catch (e) {
-    console.log(`[installer] Gitee download failed: ${e.message}`)
-  }
-
-  // 3. GitHub 预编译二进制
-  const githubUrl = `${GITHUB_RELEASE_BASE}/${assetName}`
-  try {
-    await installFromUrl(githubUrl, eventSender)
-    return
-  } catch (githubErr) {
+  const sendProgress = (msg) => {
     if (eventSender && !eventSender.isDestroyed()) {
-      eventSender.send('mimo:installProgress', {
-        stdout: `下载失败 (${githubErr.message})，尝试 npm 安装...`
-      })
+      eventSender.send('mimo:installProgress', { stdout: msg })
     }
   }
 
-  // 4. npm 全局安装
-  await installFromNpm(eventSender)
+  const INSTALL_TIMEOUT = 5 * 60 * 1000 // 5 分钟整体超时
+  const PER_SOURCE_RETRIES = 2
+
+  const installPromise = (async () => {
+    // 1. 内置 CLI（秒装，无需网络）
+    try {
+      await installFromBundled(eventSender)
+      return
+    } catch (e) {
+      // 无内置，继续
+    }
+
+    // 2. Gitee 镜像（国内快），重试 PER_SOURCE_RETRIES 次
+    const assetName = getAssetName()
+    const giteeUrl = `${GITEE_RELEASE_BASE}/${CLI_VERSION}/${assetName}`
+    for (let i = 0; i < PER_SOURCE_RETRIES; i++) {
+      try {
+        if (i > 0) sendProgress(`Gitee 重试 (${i + 1}/${PER_SOURCE_RETRIES})...`)
+        await installFromUrl(giteeUrl, eventSender)
+        return
+      } catch (e) {
+        console.log(`[installer] Gitee attempt ${i + 1} failed: ${e.message}`)
+        if (i < PER_SOURCE_RETRIES - 1) await sleep(2000)
+      }
+    }
+
+    // 3. GitHub 预编译二进制，重试 PER_SOURCE_RETRIES 次
+    const githubUrl = `${GITHUB_RELEASE_BASE}/${assetName}`
+    for (let i = 0; i < PER_SOURCE_RETRIES; i++) {
+      try {
+        if (i > 0) sendProgress(`GitHub 重试 (${i + 1}/${PER_SOURCE_RETRIES})...`)
+        await installFromUrl(githubUrl, eventSender)
+        return
+      } catch (e) {
+        console.log(`[installer] GitHub attempt ${i + 1} failed: ${e.message}`)
+        if (i < PER_SOURCE_RETRIES - 1) await sleep(2000)
+      }
+    }
+
+    // 4. npm 全局安装（最后手段，不重试）
+    sendProgress('所有下载源均已尝试，正在通过 npm 安装...')
+    await installFromNpm(eventSender)
+  })()
+
+  const timeout = new Promise((_, reject) => {
+    setTimeout(() => reject(new Error('安装超时（5分钟），请检查网络连接后重试')), INSTALL_TIMEOUT)
+  })
+
+  try {
+    await Promise.race([installPromise, timeout])
+  } catch (e) {
+    sendProgress(e.message)
+    throw e
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms))
 }
 
 /**
@@ -370,4 +402,18 @@ function copyFileSync(src, dest) {
   fs.writeFileSync(dest, data)
 }
 
-module.exports = { detect, install, autoInstallIfNeeded }
+/**
+ * 静默安装（不依赖 BrowserWindow eventSender）
+ * 用于 streaming.cjs 等后端调用场景，进度通过回调输出
+ */
+function installSilent(onProgress) {
+  const emitter = {
+    send: (channel, data) => {
+      if (onProgress) onProgress(data)
+    },
+    isDestroyed: () => false,
+  }
+  return install(emitter)
+}
+
+module.exports = { detect, install, autoInstallIfNeeded, installSilent }

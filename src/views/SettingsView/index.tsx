@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
 import { isElectron, getAPI } from '@/lib/ipc'
-import { Settings as SettingsIcon, Palette, Info, Shield, RefreshCw, Download, AlertCircle, CheckCircle } from 'lucide-react'
+import { useMimoInstaller } from '@/hooks/useMimoInstaller'
+import { Settings as SettingsIcon, Palette, Info, Shield, RefreshCw, Download, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import { useThemeStore, THEMES, type ThemeId } from '@/stores/themeStore'
 import { useUIStore } from '@/stores/uiStore'
+import { useChatStore } from '@/stores/chatStore'
 import { PROVIDER_TEMPLATES } from '@/config/providerTemplates'
 
 type SettingsTab = 'appearance' | 'providers' | 'about'
@@ -116,11 +118,15 @@ function AppearanceTab() {
 function ProvidersTab() {
   const [apiKeys, setApiKeys] = useState<Record<string, string>>({})
   const [saving, setSaving] = useState<string | null>(null)
-  const [serverOk, setServerOk] = useState(false)
   const [dynamicModels, setDynamicModels] = useState<Record<string, { id: string; name: string }[]>>({})
   const [fetchingModels, setFetchingModels] = useState<Record<string, boolean>>({})
 
-  useEffect(() => { loadKeys(); checkServer() }, [])
+  // 响应式：从 zustand 读取 server 状态（不再做一次性检查）
+  const serverConnected = useChatStore((s) => s.serverConnected)
+  const serverReady = useChatStore((s) => s.serverReady)
+  const serverOk = serverConnected || serverReady
+
+  useEffect(() => { loadKeys() }, [])
 
   const loadKeys = async () => {
     if (!isElectron()) return
@@ -129,13 +135,6 @@ function ProvidersTab() {
     setApiKeys(keys)
     // 加载已配置 Provider 的动态模型
     refreshAllModels(keys)
-  }
-
-  const checkServer = async () => {
-    try {
-      const { mimoClient } = await import('@/lib/mimoClient')
-      setServerOk(await mimoClient.isAvailable())
-    } catch { setServerOk(false) }
   }
 
   const refreshAllModels = async (keys: Record<string, string>) => {
@@ -360,50 +359,46 @@ function CustomProviderCard({ apiKeys, serverOk, onKeysUpdate }: {
 
 // === MiMo CLI Install ===
 function MimoCliInstall() {
-  const [status, setStatus] = useState<'checking' | 'installed' | 'not-installed' | 'installing' | 'error'>('checking')
-  const [version, setVersion] = useState('')
-  const [log, setLog] = useState('')
-
-  useEffect(() => {
-    if (!isElectron()) { setStatus('not-installed'); return }
-    const api = (window as any).electronAPI
-    api?.mimo?.detect?.().then((r: any) => {
-      if (r?.installed) { setStatus('installed'); setVersion(r.version || '') }
-      else { setStatus('not-installed') }
-    }).catch(() => setStatus('not-installed'))
-  }, [])
-
-  const install = async () => {
-    if (!isElectron()) return
-    setStatus('installing'); setLog('')
-    const api = (window as any).electronAPI
-    const unsub = api?.mimo?.onInstallProgress?.((d: any) => setLog(p => p + (d.stdout || d.stderr || '')))
-    try {
-      await api?.mimo?.install?.()
-      const r = await api?.mimo?.detect?.()
-      if (r?.installed) { setStatus('installed'); setVersion(r.version || '') }
-      else { setStatus('error') }
-    } catch (e: any) {
-      setStatus('error')
-      setLog(p => p + '\n' + (e?.message || 'Unknown error'))
-    } finally { unsub?.() }
-  }
+  const { status, version, log, progress, stepName, install, retry } = useMimoInstaller()
 
   if (status === 'checking') return <p className="text-[10px] text-mc-text-muted">检测 MiMo CLI...</p>
   if (status === 'installed') return (
     <div className="flex items-center gap-2 text-[10px] text-mc-success"><CheckCircle size={12} />MiMo CLI 已安装{version ? ` (v${version})` : ''}</div>
   )
+  if (status === 'connecting') return (
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-[10px] text-mc-text-secondary">
+        <Loader2 size={12} className="animate-spin text-mc-accent" />CLI 已安装，正在连接 MiMo 服务...
+      </div>
+    </div>
+  )
   if (status === 'installing') return (
-    <div className="space-y-1">
-      <div className="flex items-center gap-2 text-[10px] text-mc-text-secondary"><Download size={12} className="animate-pulse text-mc-accent" />正在安装 MiMo CLI...</div>
-      {log ? <pre className="text-[9px] text-mc-text-muted bg-mc-bg rounded p-2 max-h-[60px] overflow-y-auto font-mono">{log.slice(-300)}</pre> : null}
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 text-[10px] text-mc-text-secondary">
+        {progress === null ? (
+          <Download size={12} className="animate-pulse text-mc-accent" />
+        ) : (
+          <span className="text-mc-accent text-xs font-medium">{progress}%</span>
+        )}
+        正在安装 MiMo CLI...
+      </div>
+      {stepName && <p className="text-[9px] text-mc-text-muted">{stepName}</p>}
+      {progress !== null && (
+        <div className="w-full bg-mc-elevated rounded-full h-1.5 overflow-hidden">
+          <div
+            className="bg-mc-accent h-1.5 rounded-full transition-all duration-300"
+            style={{ width: `${Math.max(progress, 5)}%` }}
+          />
+        </div>
+      )}
+      {log ? <pre className="text-[9px] text-mc-text-muted bg-mc-bg rounded p-2 max-h-[40px] overflow-y-auto font-mono">{log.slice(-300)}</pre> : null}
     </div>
   )
   if (status === 'error') return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-[10px] text-mc-error"><AlertCircle size={12} />安装失败</div>
       {log ? <pre className="text-[9px] text-mc-text-muted bg-mc-bg rounded p-2 max-h-[80px] overflow-y-auto font-mono">{log.slice(-300)}</pre> : null}
-      <button onClick={install} className="text-[10px] text-mc-accent hover:underline">重试安装</button>
+      <button onClick={retry} className="text-[10px] text-mc-accent hover:underline">重试安装</button>
     </div>
   )
   return (

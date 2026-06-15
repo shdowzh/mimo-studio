@@ -1,5 +1,12 @@
 // Release script — 构建所有平台安装包并输出到 release/ 目录
 // Usage: node scripts/release.cjs [version] [platform]
+//
+// 步骤：
+// 1. 编译 opencode server（需要 Bun，可选）
+// 2. 构建前端
+// 3. 下载内置 MiMo CLI（fallback 用）
+// 4. 打包平台安装包
+// 5. 生成校验和
 
 const { execSync } = require('child_process')
 const fs = require('fs')
@@ -14,23 +21,35 @@ const GITHUB_RELEASE_BASE = 'https://github.com/XiaomiMiMo/MiMo-Code/releases/la
 
 console.log(`\n🚀 MiMo Studio Release v${version}\n`)
 
+// 0. 尝试编译 opencode server（嵌入模式，需要 Bun）
+console.log('[0/6] Building opencode server for embedded mode...')
+try {
+  execSync('node scripts/build-opencode.cjs', { stdio: 'inherit', cwd: path.join(__dirname, '..') })
+} catch (e) {
+  console.log('  ⚠️  opencode build skipped (Bun not available?), will use spawn fallback')
+}
+
 // 1. 构建前端
-console.log('[1/5] Building frontend...')
+console.log('[1/6] Building frontend...')
 execSync('npx vite build', { stdio: 'inherit', cwd: path.join(__dirname, '..') })
 
-// 2. 下载内置 MiMo CLI
-console.log('[2/5] Downloading bundled MiMo CLI...')
-downloadBundledCli()
+// 2. 下载内置 MiMo CLI（spawn 模式 fallback）
+console.log('[2/6] Downloading bundled MiMo CLI...')
+try {
+  downloadBundledCli()
+} catch (e) {
+  console.log('  ⚠️  CLI download skipped, spawn mode may not work offline')
+}
 
 // 3. 清理旧的 release
-console.log('[3/5] Cleaning old release...')
+console.log('[3/6] Cleaning old release...')
 if (fs.existsSync(releaseDir)) {
   fs.rmSync(releaseDir, { recursive: true, force: true })
 }
 
 // 4. 构建平台安装包
 const platform = process.argv[3] || process.platform
-console.log(`[4/5] Building for ${platform}...`)
+console.log(`[4/6] Building for ${platform}...`)
 
 const buildCmd = platform === 'win32' ? 'electron-builder --win'
   : platform === 'darwin' ? 'electron-builder --mac'
@@ -39,7 +58,7 @@ const buildCmd = platform === 'win32' ? 'electron-builder --win'
 execSync(`npx ${buildCmd}`, { stdio: 'inherit', cwd: path.join(__dirname, '..') })
 
 // 5. 生成校验和
-console.log('[5/5] Generating checksums...')
+console.log('[5/6] Generating checksums...')
 const checksums = []
 if (fs.existsSync(releaseDir)) {
   const crypto = require('crypto')
@@ -81,7 +100,6 @@ function downloadBundledCli() {
   const binName = os.platform() === 'win32' ? 'mimo.exe' : 'mimo'
   const targetBin = path.join(targetDir, binName)
 
-  // 已存在就跳过
   if (fs.existsSync(targetBin)) {
     console.log(`  ✓ Bundled CLI already exists: ${targetBin}`)
     return

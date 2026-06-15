@@ -16,43 +16,71 @@ export async function connectToServer(): Promise<boolean> {
     return false
   }
 
-  try {
-    // 1. 先尝试获取已运行的 server 状态
-    console.log('[API] Checking server status...')
-    const status = await getAPI().mimo.serverStatus()
-    if (status.running && status.port > 0) {
-      console.log(`[API] Server already running on port ${status.port}`)
-      mimoClient.connect(status.port, '', (connected) => {
-        console.log(`[API] MimoClient connection: ${connected}`)
-        if (connected) syncKeysToServer()
-      })
-      await waitForConnection(3000)
-      if (mimoClient.isConnected) {
-        console.log('[API] Connected to existing server')
-        return true
+  const MAX_RETRIES = 3
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      // 1. 先尝试获取已运行的 server 状态
+      console.log(`[API] Checking server status (attempt ${attempt}/${MAX_RETRIES})...`)
+      const status = await getAPI().mimo.serverStatus()
+      // 同步 serveMode 到 store
+      if (status.mode) {
+        try {
+          const { useChatStore } = await import('@/stores/chatStore')
+          useChatStore.setState({ serveMode: status.mode })
+          console.log(`[API] Server mode: ${status.mode}`)
+        } catch {}
       }
-      console.log('[API] Existing server not responding, will try to restart')
-    }
-
-    // 2. 启动 server（异步，不阻塞 UI）
-    console.log('[API] Starting mimo serve...')
-    getAPI().mimo.startServer().then(result => {
-      console.log(`[API] startServer result: port=${result.port}`)
-      if (result.port > 0) {
-        mimoClient.connect(result.port, result.password, (connected) => {
+      if (status.running && status.port > 0) {
+        console.log(`[API] Server already running on port ${status.port}`)
+        mimoClient.connect(status.port, '', (connected) => {
           console.log(`[API] MimoClient connection: ${connected}`)
           if (connected) syncKeysToServer()
         })
+        await waitForConnection(3000)
+        if (mimoClient.isConnected) {
+          console.log('[API] Connected to existing server')
+          return true
+        }
+        console.log('[API] Existing server not responding, will try to restart')
       }
-    }).catch(err => {
-      console.error('[API] startServer error:', err)
-    })
 
-    return false
-  } catch (err) {
-    console.error('[API] connectToServer error:', err)
-    return false
+      // 2. 启动 server（异步，不阻塞 UI）
+      console.log('[API] Starting mimo serve...')
+      getAPI().mimo.startServer().then(async result => {
+        console.log(`[API] startServer result: port=${result.port}`)
+        try {
+          const s = await getAPI().mimo.serverStatus()
+          if (s.mode) {
+            const { useChatStore } = await import('@/stores/chatStore')
+            useChatStore.setState({ serveMode: s.mode })
+            console.log(`[API] Server mode after start: ${s.mode}`)
+          }
+        } catch {}
+        if (result.port > 0) {
+          mimoClient.connect(result.port, result.password, (connected) => {
+            console.log(`[API] MimoClient connection: ${connected}`)
+            if (connected) syncKeysToServer()
+          })
+        }
+      }).catch(err => {
+        console.error('[API] startServer error:', err)
+      })
+
+      return false
+    } catch (err) {
+      console.error(`[API] connectToServer attempt ${attempt}/${MAX_RETRIES} failed:`, err)
+      if (attempt < MAX_RETRIES) {
+        await sleep(1000 * Math.pow(2, attempt - 1))  // 1s, 2s, 4s
+      }
+    }
   }
+
+  console.error('[API] connectToServer all retries failed')
+  return false
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(r => setTimeout(r, ms))
 }
 
 function waitForConnection(timeoutMs: number): Promise<void> {
@@ -84,17 +112,6 @@ async function syncKeysToServer() {
       }
     }
   } catch {}
-}
-
-// 全局 serverConnected setter
-let setConnected: (c: boolean) => void = () => {}
-export function registerChatStoreSetter(setter: (connected: boolean) => void) {
-  setConnected = setter
-}
-
-// 从 MimoClient 连接状态同步到 zustand
-mimoClient['onConnectionChange'] = (connected: boolean) => {
-  setConnected(connected)
 }
 
 // === 本地设置便捷方法 ===

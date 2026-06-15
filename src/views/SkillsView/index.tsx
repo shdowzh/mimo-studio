@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import { useChatStore } from '@/stores/chatStore'
+import { useUIStore } from '@/stores/uiStore'
 import { isElectron, getAPI } from '@/lib/ipc'
 import { mimoClient } from '@/lib/mimoClient'
 import { Sparkles, Plus, FileCode, Trash2, BookOpen, Edit, EyeOff, Download, Loader2 } from 'lucide-react'
@@ -23,6 +24,7 @@ export default function SkillsView() {
   const [downloadOpen, setDownloadOpen] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState('')
   const [downloading, setDownloading] = useState(false)
+  const [downloadingName, setDownloadingName] = useState<string | null>(null)
 
   useEffect(() => {
     loadSkills()
@@ -99,25 +101,60 @@ export default function SkillsView() {
     loadSkills()
   }
 
-  // 从 URL 下载技能
+  // 从 URL 下载技能（手动输入）
   const handleDownload = async () => {
     if (!downloadUrl.trim() || !isElectron()) return
     setDownloading(true)
     try {
-      const response = await fetch(downloadUrl.trim())
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 15_000)
+      const response = await fetch(downloadUrl.trim(), { signal: controller.signal })
+      clearTimeout(timeout)
       if (!response.ok) throw new Error(`HTTP ${response.status}`)
       const content = await response.text()
-      // 提取 name
+      if (!content.startsWith('---\n')) throw new Error('无效的 SKILL.md：缺少 YAML frontmatter')
       const nameMatch = content.match(/^---\n[\s\S]*?^name:\s*(.+)$/m)
-      const name = nameMatch ? nameMatch[1].trim() : `downloaded-${Date.now()}`
+      const name = nameMatch ? nameMatch[1].trim() : `skill-${Date.now()}`
       await getAPI().files.writeSkill(name, content)
       setDownloadOpen(false)
       setDownloadUrl('')
       loadSkills()
+      useUIStore.getState().addToast(`技能 "${name}" 安装成功`, 'success')
     } catch (err) {
-      console.error('Download skill failed:', err)
+      const msg = err instanceof Error ? err.message : '未知错误'
+      useUIStore.getState().addToast(`下载失败: ${msg}`, 'error')
     } finally {
       setDownloading(false)
+    }
+  }
+
+  // 直接下载指定技能（从技能商店卡片）
+  const handleDirectDownload = async (item: typeof MODELSCOPE_FEATURED[number]) => {
+    if (!isElectron() || !item.skillUrl) {
+      // fallback: 打开手动输入弹窗
+      setDownloadUrl(item.url || '')
+      setDownloadOpen(true)
+      return
+    }
+    setDownloadingName(item.name)
+    try {
+      const controller = new AbortController()
+      const timeout = setTimeout(() => controller.abort(), 20_000)
+      const response = await fetch(item.skillUrl, { signal: controller.signal })
+      clearTimeout(timeout)
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      const content = await response.text()
+      if (!content.startsWith('---\n')) throw new Error('无效的 SKILL.md：缺少 YAML frontmatter')
+      const nameMatch = content.match(/^---\n[\s\S]*?^name:\s*(.+)$/m)
+      const name = nameMatch ? nameMatch[1].trim() : `skill-${Date.now()}`
+      await getAPI().files.writeSkill(name, content)
+      loadSkills()
+      useUIStore.getState().addToast(`技能 "${name}" 安装成功`, 'success')
+    } catch (err) {
+      const msg = err instanceof Error ? (err.name === 'AbortError' ? '下载超时' : err.message) : '未知错误'
+      useUIStore.getState().addToast(`下载 "${item.name}" 失败: ${msg}`, 'error')
+    } finally {
+      setDownloadingName(null)
     }
   }
 
@@ -188,7 +225,13 @@ export default function SkillsView() {
             serverConnected={serverConnected}
           />
         ) : (
-          <SkillStoreTab skills={availableSkills} onView={handleView} onDownload={() => setDownloadOpen(true)} />
+          <SkillStoreTab
+            skills={availableSkills}
+            onView={handleView}
+            onDownload={() => setDownloadOpen(true)}
+            onDirectDownload={handleDirectDownload}
+            downloadingName={downloadingName}
+          />
         )}
       </div>
 
@@ -320,10 +363,12 @@ function AvailableSkillsTab({
 }
 
 // === Skill Store Tab ===
-function SkillStoreTab({ skills, onView, onDownload }: {
+function SkillStoreTab({ skills, onView, onDownload, onDirectDownload, downloadingName }: {
   skills: SkillInfo[]
   onView: (skill: SkillInfo) => void
   onDownload: () => void
+  onDirectDownload: (item: typeof MODELSCOPE_FEATURED[number]) => void
+  downloadingName: string | null
 }) {
   return (
     <div className="space-y-5">
@@ -355,10 +400,13 @@ function SkillStoreTab({ skills, onView, onDownload }: {
               </div>
               <p className="text-[10px] text-mc-text-muted line-clamp-2">{item.desc}</p>
               <button
-                onClick={onDownload}
-                className="text-[10px] text-mc-accent hover:underline"
+                onClick={() => onDirectDownload(item)}
+                disabled={downloadingName === item.name}
+                className={`text-[10px] hover:underline transition-colors ${
+                  downloadingName === item.name ? 'text-mc-text-muted cursor-wait' : 'text-mc-accent'
+                }`}
               >
-                下载安装 →
+                {downloadingName === item.name ? '下载中...' : '下载安装 →'}
               </button>
             </div>
           ))}
@@ -398,10 +446,34 @@ function SkillStoreTab({ skills, onView, onDownload }: {
 }
 
 const MODELSCOPE_FEATURED = [
-  { name: '代码审查', icon: '🔍', desc: '系统性代码审查：安全/性能/可维护性', url: 'https://modelscope.cn/skills' },
-  { name: 'API 设计', icon: '🔌', desc: 'RESTful API 设计规范：命名/版本/错误码', url: 'https://modelscope.cn/skills' },
-  { name: 'Bug 分析', icon: '🐛', desc: '结构化 Bug 定位：复现→定位→根因→修复', url: 'https://modelscope.cn/skills' },
-  { name: '前端组件', icon: '🎨', desc: 'React/Vue 组件开发最佳实践', url: 'https://modelscope.cn/skills' },
+  {
+    name: '代码审查',
+    icon: '🔍',
+    desc: '系统性代码审查：安全/性能/可维护性',
+    url: 'https://modelscope.cn/skills',
+    skillUrl: '',
+  },
+  {
+    name: 'API 设计',
+    icon: '🔌',
+    desc: 'RESTful API 设计规范：命名/版本/错误码',
+    url: 'https://modelscope.cn/skills',
+    skillUrl: '',
+  },
+  {
+    name: 'Bug 分析',
+    icon: '🐛',
+    desc: '结构化 Bug 定位：复现→定位→根因→修复',
+    url: 'https://modelscope.cn/skills',
+    skillUrl: '',
+  },
+  {
+    name: '前端组件',
+    icon: '🎨',
+    desc: 'React/Vue 组件开发最佳实践',
+    url: 'https://modelscope.cn/skills',
+    skillUrl: '',
+  },
 ]
 
 // === Skill Card ===

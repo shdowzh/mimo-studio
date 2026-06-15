@@ -13,6 +13,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('mimo:installProgress', handler)
       return () => ipcRenderer.removeListener('mimo:installProgress', handler)
     },
+    onStatus: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('mimo:status', handler)
+      return () => ipcRenderer.removeListener('mimo:status', handler)
+    },
   },
 
   // === 本地设置 ===

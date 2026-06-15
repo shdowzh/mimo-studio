@@ -8,10 +8,11 @@ export interface ElectronAPI {
   mimo: {
     startServer: () => Promise<{ port: number; password: string }>
     stopServer: () => Promise<void>
-    serverStatus: () => Promise<{ running: boolean; port: number }>
+    serverStatus: () => Promise<{ running: boolean; port: number; mode: string }>
     detect: () => Promise<{ installed: boolean; version?: string; path?: string; source?: string }>
     install: () => Promise<void>
     onInstallProgress: (callback: (data: { stdout?: string; stderr?: string }) => void) => () => void
+    onStatus: (callback: (data: { installed: boolean; version?: string; installing?: boolean; justInstalled?: boolean; error?: string }) => void) => () => void
   }
 
   // === 本地设置 ===

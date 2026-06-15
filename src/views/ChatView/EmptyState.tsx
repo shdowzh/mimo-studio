@@ -17,6 +17,8 @@ export default function EmptyState() {
   const sendMessage = useChatStore((s) => s.sendMessage)
   const serverConnected = useChatStore((s) => s.serverConnected)
   const serverReady = useChatStore((s) => s.serverReady)
+  const initError = useChatStore((s) => s.initError)
+  const retryInit = useChatStore((s) => s.retryInit)
   const [hasApiKeys, setHasApiKeys] = useState(false)
   const [checking, setChecking] = useState(true)
 
@@ -36,6 +38,18 @@ export default function EmptyState() {
     return (
       <div className="flex-1 flex items-center justify-center">
         <div className="text-center space-y-5 max-w-sm mx-auto px-4">
+          {/* 初始化超时错误 */}
+          {initError && (
+            <div className="mc-card p-3 border-red-500/30 bg-red-500/5">
+              <p className="text-xs text-red-500 mb-2">{initError}</p>
+              <button
+                onClick={retryInit}
+                className="text-[10px] px-3 py-1 rounded bg-red-500/10 hover:bg-red-500/20 text-red-500 transition-colors"
+              >
+                重试连接
+              </button>
+            </div>
+          )}
           <div className="space-y-1.5">
             <p className="text-sm text-mc-text-secondary">欢迎使用 MiMo Studio</p>
             <p className="text-xs text-mc-text-muted">开始前请先完成一项配置：</p>
@@ -68,6 +82,16 @@ export default function EmptyState() {
               </div>
             </button>
           </div>
+          {/* 重试连接 */}
+          <button
+            onClick={async () => {
+              const { connectToServer } = await import('@/lib/api')
+              await connectToServer()
+            }}
+            className="text-[10px] text-mc-accent hover:underline"
+          >
+            重试连接
+          </button>
         </div>
       </div>
     )
@@ -83,13 +107,15 @@ export default function EmptyState() {
             MiMo Studio
           </div>
           <p className="text-xs text-mc-text-muted">
-            {serverReady
-              ? 'AI 编码助手 · Agent 自动执行任务'
-              : serverConnected
-                ? '正在初始化 MiMo 服务...'
-                : hasApiKeys
-                  ? '离线模式 — 纯文本聊天（无 Agent 能力）'
-                  : '正在连接 MiMo Server...'}
+            {initError
+              ? `⚠️ ${initError}`
+              : serverReady
+                ? 'AI 编码助手 · Agent 自动执行任务'
+                : serverConnected
+                  ? '正在初始化 MiMo 服务...'
+                  : hasApiKeys
+                    ? '离线模式 — 纯文本聊天（无 Agent 能力）'
+                    : '正在连接 MiMo Server...'}
           </p>
         </div>
 

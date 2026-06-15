@@ -15,6 +15,7 @@ export default function ChatView() {
     currentSessionID,
     serverConnected,
     serverReady,
+    serveMode,
     currentProvider,
     messages,
     loadSessions,
@@ -22,6 +23,8 @@ export default function ChatView() {
     initSSE,
     lastError,
     setLastError,
+    initError,
+    retryInit,
   } = useChatStore()
 
   // 模式判断：
@@ -76,10 +79,26 @@ export default function ChatView() {
         <ChatHeader />
 
         {/* 初始化中横幅 */}
-        {isInitializing && (
+        {isInitializing && !initError && (
           <div className="px-3 py-1 border-b flex items-center gap-2 text-[10px] bg-blue-500/8 border-blue-500/20 text-blue-500">
             <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-blue-500 animate-pulse" />
             <span>正在初始化 MiMo 服务...</span>
+          </div>
+        )}
+
+        {/* 初始化超时错误 */}
+        {initError && (
+          <div className="px-3 py-1.5 border-b flex items-center justify-between text-[10px] bg-red-500/8 border-red-500/20 text-red-500">
+            <span className="flex items-center gap-2 truncate flex-1">
+              <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-red-500" />
+              <span className="truncate">{initError}</span>
+            </span>
+            <button
+              onClick={retryInit}
+              className="ml-2 px-2 py-0.5 rounded text-[10px] bg-red-500/10 hover:bg-red-500/20 shrink-0 transition-colors"
+            >
+              重试
+            </button>
           </div>
         )}
 
@@ -92,7 +111,7 @@ export default function ChatView() {
           }`}>
             <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isAgentMode ? 'bg-green-500' : 'bg-amber-500'}`} />
             {isAgentMode ? (
-              <span>Agent 模式 — 工具调用 · 文件操作 · 权限管理 均可用{currentProvider && currentProvider !== 'mimo' && currentProvider !== 'opencode' ? `（经 MiMo Code → ${currentProvider}）` : ''}</span>
+              <span>Agent 模式{serveMode === 'embedded' ? ' (直嵌)' : ''} — 工具调用 · 文件操作 · 权限管理 均可用{currentProvider && currentProvider !== 'mimo' && currentProvider !== 'opencode' ? `（经 MiMo Code → ${currentProvider}）` : ''}</span>
             ) : (
               <span>离线模式 — MiMo Serve 未连接，纯文本（无 Agent 能力）{currentProvider ? `，直连 ${currentProvider}` : ''}</span>
             )}
