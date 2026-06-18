@@ -76,18 +76,10 @@
     "mac": {
       "target": [
         {
-          "target": "dmg",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
+          "target": "dmg"
         },
         {
-          "target": "tar.xz",
-          "arch": [
-            "x64",
-            "arm64"
-          ]
+          "target": "tar.xz"
         }
       ],
       "icon": "build/icon.png",
