@@ -20,13 +20,7 @@ jobs:
         with: { node-version: '22' }
       - run: npm install
       - run: npx vite build
-      - name: Download bundled MiMo CLI (${{ matrix.arch }})
-        run: |
-          mkdir -p cli/darwin-${{ matrix.arch }}
-          ASSET="mimocode-darwin-${{ matrix.arch }}.zip"
-          curl -L -o /tmp/mimo.zip "https://github.com/XiaomiMiMo/MiMo-Code/releases/latest/download/$ASSET"
-          unzip -o /tmp/mimo.zip -d cli/darwin-${{ matrix.arch }}
-          chmod +x cli/darwin-${{ matrix.arch }}/mimo
+      # 不内置 MiMo CLI — 用户首次启动时自动下载（优先码云镜像）
       - name: Build macOS (${{ matrix.arch }})
         run: npx electron-builder --mac --${{ matrix.arch }}
       - uses: actions/upload-artifact@v4
@@ -46,14 +40,9 @@ jobs:
           sudo gem install fpm
       - run: npm install
       - run: npx vite build
-      - name: Download bundled MiMo CLI (Linux x64)
-        run: |
-          mkdir -p cli/linux-x64
-          curl -L -o /tmp/mimo.tar.gz "https://github.com/XiaomiMiMo/MiMo-Code/releases/latest/download/mimocode-linux-x64.tar.gz"
-          tar -xzf /tmp/mimo.tar.gz -C cli/linux-x64
-          chmod +x cli/linux-x64/mimo
+      # 不内置 MiMo CLI — 用户首次启动时自动下载（优先码云镜像）
       - name: Build Linux
-        run: npx electron-builder --linux AppImage deb
+        run: npx electron-builder --linux AppImage deb tar.xz
       - uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
@@ -62,6 +51,10 @@ jobs:
         with:
           name: linux-deb
           path: release/MiMo-Studio-*.deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-tar-xz
+          path: release/MiMo-Studio-*-linux-*.tar.xz
 
   # ── Windows (NSIS) ───────────────────────────────────────
   windows:
@@ -72,18 +65,17 @@ jobs:
         with: { node-version: '22' }
       - run: npm install
       - run: npx vite build
-      - name: Download bundled MiMo CLI (Windows x64)
-        shell: pwsh
-        run: |
-          New-Item -ItemType Directory -Force -Path cli\windows-x64
-          Invoke-WebRequest -Uri "https://github.com/XiaomiMiMo/MiMo-Code/releases/latest/download/mimocode-windows-x64.zip" -OutFile mimo.zip
-          Expand-Archive -Path mimo.zip -DestinationPath cli\windows-x64 -Force
+      # 不内置 MiMo CLI — 用户首次启动时自动下载（优先码云镜像）
       - name: Build Windows
         run: npx electron-builder --win
       - uses: actions/upload-artifact@v4
         with:
-          name: windows
+          name: windows-setup
           path: release/MiMo-Studio-Setup-*.exe
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable
+          path: release/MiMo-Studio-*-win-*-Portable.tar.xz
 
   # ── Gitee Release (aggregator) ───────────────────────────
   gitee-release:
@@ -113,7 +105,7 @@ jobs:
           echo "Release ID: $RELEASE_ID"
 
           # Upload all assets (skip files > 100MB for Gitee)
-          find . -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" \) | while read f; do
+          find . -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.tar.xz" \) | while read f; do
             SIZE=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null || echo 0)
             if [ "$SIZE" -gt 104857600 ]; then
               echo "Skipping (>$100MB): $f ($(echo "scale=1; $SIZE/1048576" | bc)MB)"
