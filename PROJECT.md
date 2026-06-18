@@ -206,6 +206,10 @@ mimo-studio/
 ├── tailwind.config.js
 ├── vite.config.ts
 ├── tsconfig.json
+├── .gitee-ci.yml                # Gitee CI 流水线（Linux 构建+发布）
+├── .github/workflows/
+│   ├── ci.yml                   # GitHub CI：lint + typecheck + test + build
+│   └── release.yml              # GitHub Release：全平台构建 + 码云上传
 └── PROJECT.md                   # 本文档
 ```
 
@@ -748,6 +752,70 @@ onDone → store 写入完整消息 + idle 状态
 - 不可变更新原则：handler 内不能 mutate 入参，否则 zustand/React 渲染失效。
 - 服务端 API 路径要逐个测，trailing slash 是常见 503 来源。
 
+### V7 → V8 CI/CD 与制品优化（2026-06-19）
+
+**背景：** GitHub Actions 流水线从未成功跑通过，码云 Release 上传持续失败，macOS DMG 体积达 225MB 远超码云 100MB 限制。逐个修复 CI 配置、ESLint/Typecheck/Test 错误、electron-builder 自动发布报错，移除内置 MiMo CLI 减小包体积，新增 macOS tar.xz 格式适配码云分发。
+
+**CI 修复（共 4 轮迭代 v1.1.1→v1.1.6）：**
+
+| 轮次 | 问题 | 修复 |
+|------|------|------|
+| v1.1.1 | ESLint 12 error + 88 warning 导致 `npm run lint` 失败 | 降级 `react-hooks` error→warn；修复 `no-useless-assignment` 和测试文件 TypeScript 错误 |
+| v1.1.1 | `chatStore.test.ts` 引用已移除的 `serverConnected`/`serverReady` 属性 | 改为 `serverState.status` 结构 |
+| v1.1.1 | `providerModels.ts` 死代码赋值 | 移除不可达的 `= []` 初始化 |
+| v1.1.2 | 所有平台 electron-builder 报 `GH_TOKEN not set` | `package.json` 的 `publish.owner/repo` 指向了 `XiaomiMiMo/MiMo-Code`，且 CI 未设 `--publish never` |
+| v1.1.2 | Release 缺少 tar.xz 制品上传 | Windows/Linux 构建产 tar.xz 但未 upload-artifact |
+| v1.1.3 | Gitee 上传脚本 `python3 -c` JSON 解析崩溃 | 改为 `jq` 解析；后续又改为 Node.js 行内脚本 |
+| v1.1.4 | `GITEE_TOKEN` secret 过期 | 通过 `gh secret set` 更新为有效 token |
+| v1.1.6 | macOS 构建产出一式两份文件（arm64 构建产 x64+arm64 两个文件） | `package.json` mac target 移除内嵌 `arch: ["x64", "arm64"]`，由 CI `--x64`/`--arm64` 控制 |
+
+**制品策略变更：**
+
+| 项目 | 旧 (V7 及以前) | 新 (V8) |
+|------|------|------|
+| MiMo CLI | 构建时下载打进安装包（~25MB 额外体积） | 不内置，用户首次启动自动下载（码云镜像→GitHub→npm fallback） |
+| macOS 格式 | 仅 DMG | DMG + tar.xz（tar.xz 压缩率 ~2.4x，从 225MB→77MB） |
+| 码云分发 | 尝试上传所有（>100MB 跳过） | 仅上传 <100MB：exe/portable/deb/tar.xz；DMG/AppImage 走 GitHub Releases |
+| 构建目标 | Win nsis / Mac dmg / Linux AppImage+deb | 全平台增加 tar.xz：Windows portable / macOS tar.xz / Linux tar.xz |
+| 本地构建 | `electron-builder` 默认尝试验 publish | 所有 script 加 `--publish never` |
+
+**实际制品大小（v1.1.5 构建日志）：**
+
+| 制品 | 大小 | 上传码云 | 上传 GitHub |
+|------|------|:--:|:--:|
+| Windows NSIS exe | 86 MB | ✅ | ✅ |
+| Windows portable tar.xz | ~80 MB | ✅ | ✅ |
+| Linux tar.xz | 77 MB | ✅ | ✅ |
+| Linux deb | 90 MB | ✅ | ✅ |
+| Linux AppImage | 116 MB | ❌ >100MB | ✅ |
+| macOS x64 tar.xz | 77 MB | ✅ | ✅ |
+| macOS arm64 tar.xz | 70 MB | ✅ | ✅ |
+| macOS x64 DMG | 114 MB | ❌ >100MB | ✅ |
+| macOS arm64 DMG | 110 MB | ❌ >100MB | ✅ |
+
+**CI/CD 架构：**
+
+```
+GitHub Actions (push tag v*)
+  ├── macos (x64)     → DMG + tar.xz  → upload-artifact
+  ├── macos (arm64)   → DMG + tar.xz  → upload-artifact
+  ├── linux           → AppImage+deb+tar.xz → upload-artifact
+  ├── windows         → exe+portable.tar.xz → upload-artifact
+  └── gitee-release   → download-artifact → 筛选 <100MB → curl 上传 Gitee
+```
+
+Gitee CI（`.gitee-ci.yml`）配置已就绪，但需在 Gitee 项目手动开通 Gitee Go 服务并设置 `GITEE_TOKEN` 变量后方可使用。
+
+**新建/修改文件：**
+- `.gitee-ci.yml` — Gitee CI Linux 构建流水线（待开通）
+- `.github/workflows/release.yml` — CI 修复 + tar.xz artifact + jq Gitee 上传
+- `package.json` — mac 加 tar.xz target + publish owner/repo 修正 + build script 加 `--publish never`
+- `eslint.config.js` — react-hooks error→warn
+- `src/lib/providerModels.ts` — 移除 dead code 赋值
+- `src/lib/mimoClient.test.ts` — ts 类型断言修复
+- `src/stores/chatStore.test.ts` — 迁移到 `serverState` 结构
+- `README.md` — 制品列表 + 版本号 + CLI 安装说明更新
+
 ---
 
 ## 10. 操作手册
@@ -755,28 +823,48 @@ onDone → store 写入完整消息 + idle 状态
 ### 10.1 安装与启动
 
 **Windows — NSIS 安装包**
-下载 `MiMo-Studio-Setup-1.0.0-win-x64.exe`，双击安装到 Program Files。
+下载 `MiMo-Studio-Setup-1.1.0-win-x64.exe`，双击安装到 Program Files（支持自定义目录）。
 
 **Windows — 免安装版**
-下载 `MiMo-Studio-1.0.0-win-x64-Portable.tar.xz`，解压到任意位置：
+下载 `MiMo-Studio-1.1.0-win-x64-Portable.tar.xz`，解压到任意位置：
 ```bash
-tar xf MiMo-Studio-1.0.0-win-x64-Portable.tar.xz
-./win-unpacked/MiMo Studio.exe
+tar xf MiMo-Studio-1.1.0-win-x64-Portable.tar.xz
+./MiMo Studio.exe
 ```
 
-**macOS — DMG**
-下载对应架构的 DMG：
-- Apple Silicon (M1/M2/M3/M4)：`MiMo-Studio-1.0.0-mac-arm64.dmg`
-- Intel：`MiMo-Studio-1.0.0-mac-x64.dmg`
+**Linux — tar.xz**
+下载 `MiMo-Studio-1.1.0-linux-x64.tar.xz`，解压即用：
+```bash
+tar xf MiMo-Studio-1.1.0-linux-x64.tar.xz
+./mimo-studio
+```
 
-双击打开 DMG → 将 MiMo Studio 拖入 Applications 文件夹。首次打开如提示"无法验证开发者"，请前往系统设置 → 隐私与安全性 → 点击"仍要打开"。
+**Linux — deb**
+下载 `MiMo-Studio-1.1.0-linux-amd64.deb`：
+```bash
+sudo dpkg -i MiMo-Studio-1.1.0-linux-amd64.deb
+```
+
+**macOS — tar.xz**（推荐，码云可下载）
+下载对应架构的 tar.xz：
+- Apple Silicon (M1/M2/M3/M4)：`MiMo-Studio-1.1.0-mac-arm64.tar.xz`
+- Intel：`MiMo-Studio-1.1.0-mac-x64.tar.xz`
+
+```bash
+tar xf MiMo-Studio-1.1.0-mac-arm64.tar.xz
+open MiMo\ Studio.app
+```
+
+**macOS — DMG**（GitHub Releases 下载，码云因 >100MB 不提供）
+下载对应架构的 DMG，双击打开 → 将 MiMo Studio 拖入 Applications 文件夹。
+
+> **macOS 用户**：首次打开可能会提示"无法验证开发者"，请在系统设置 → 隐私与安全性中点击"仍要打开"。
 
 **首次启动**
 1. 显示欢迎引导 → 点击"开始使用"
-2. MiMo CLI 从内置二进制自动安装（秒装，无需联网）
+2. 自动检测/安装 MiMo CLI（无内置二进制，从码云镜像下载 → GitHub → npm 回退）
 3. MiMo Serve 初始化期间显示蓝色"正在初始化"横幅
 4. 初始化完成后自动切换为绿色"Agent 模式"
-5. 如内置安装失败，引导页提供 Gitee 镜像下载（国内快）或 GitHub 下载
 
 > **已安装 CLI 的用户**：如果 `~/.mimocode/bin/mimo` 已存在且版本有效，自动跳过安装，不会覆盖降级。
 
