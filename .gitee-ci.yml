@@ -53,13 +53,13 @@ release:
         exit 1
       fi
       echo "==> Tag: $TAG  Version: $TAG_NUM"
-      echo "==> Token exists: $([ -n "$GITEE_TOKEN" ] && echo YES || echo NO)"
+      echo "==> Token exists: $([ -n "$(GITEE_TOKEN)" ] && echo YES || echo NO)"
 
       API="https://gitee.com/api/v5/repos/shdowzh/mimo-studio"
 
       # 1. 查找已存在的 Release
       echo "==> Looking for existing release..."
-      RELEASES=$(curl -s "$API/releases?access_token=$GITEE_TOKEN&per_page=50")
+      RELEASES=$(curl -s "$API/releases?access_token=$(GITEE_TOKEN)&per_page=50")
       RELEASE_ID=$(echo "$RELEASES" | node -e "
         const d=JSON.parse(require('fs').readFileSync(0,'utf8'));
         const r=Array.isArray(d)?d.find(r=>r.tag_name===process.argv[1]):null;
@@ -71,7 +71,7 @@ release:
         echo "==> Creating release for $TAG..."
         RESP=$(curl -s -X POST "$API/releases" \
           -H "Content-Type: application/json" \
-          -d "{\"access_token\":\"$GITEE_TOKEN\",\"tag_name\":\"$TAG\",\"name\":\"MiMo Studio $TAG_NUM\",\"body\":\"Linux builds by Gitee CI\",\"prerelease\":false,\"target_commitish\":\"main\"}")
+          -d "{\"access_token\":\"$(GITEE_TOKEN)\",\"tag_name\":\"$TAG\",\"name\":\"MiMo Studio $TAG_NUM\",\"body\":\"Linux builds by Gitee CI\",\"prerelease\":false,\"target_commitish\":\"main\"}")
         RELEASE_ID=$(echo "$RESP" | node -e "console.log(JSON.parse(require('fs').readFileSync(0,'utf8')).id||'')")
       fi
 
@@ -91,7 +91,7 @@ release:
           echo "WARN: $f (${MB}MB) exceeds 100MB limit, trying anyway..."
         fi
         echo "UPLOAD: $f (${MB}MB)"
-        curl -s -X POST "$API/releases/$RELEASE_ID/attach_files?access_token=$GITEE_TOKEN" \
+        curl -s -X POST "$API/releases/$RELEASE_ID/attach_files?access_token=$(GITEE_TOKEN)" \
           -F "file=@$f" | node -e "
           try{const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log('  ->',d.name||d.browser_download_url||d.message||'OK')}
           catch(e){console.log('  -> OK (no json)')}"
