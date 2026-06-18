@@ -1,6 +1,6 @@
 // 聊天顶栏 — 只显示已配置的模型，默认 MiMo Auto
 
-import { useChatStore } from '@/stores/chatStore'
+import { useChatStore, selectors } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 import { PanelLeft, Wifi, WifiOff, ChevronDown, Settings, Key, RefreshCw, Check } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
@@ -19,7 +19,7 @@ export default function ChatHeader() {
   const currentSessionID = useChatStore((s) => s.currentSessionID)
   const sessions = useChatStore((s) => s.sessions)
   const sessionStatus = useChatStore((s) => currentSessionID ? s.sessionStatus[currentSessionID] : undefined)
-  const serverConnected = useChatStore((s) => s.serverConnected)
+  const serverConnected = useChatStore(selectors.serverConnected)
   const currentProvider = useChatStore((s) => s.currentProvider)
   const currentModel = useChatStore((s) => s.currentModel)
   const setModel = useChatStore((s) => s.setModel)

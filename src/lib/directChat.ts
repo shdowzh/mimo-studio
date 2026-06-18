@@ -3,6 +3,7 @@
 // 无 Agent 能力（无工具调用/权限/文件Diff），但保证基础聊天可用
 
 import { isElectron, getAPI } from './ipc'
+import { loadAllApiKeys } from './secret'
 import { PROVIDER_TEMPLATES } from '@/config/providerTemplates'
 import type { MessageWithParts, Part, TextPart, StepFinishPart } from './mimoTypes'
 
@@ -35,9 +36,7 @@ async function loadProviders(): Promise<ProviderEntry[]> {
 }
 
 async function loadApiKeys(): Promise<Record<string, string>> {
-  if (!isElectron()) return {}
-  const raw = await getAPI().settings.get('apiKeys')
-  return raw ? JSON.parse(raw) : {}
+  return loadAllApiKeys()
 }
 
 /**

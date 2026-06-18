@@ -57,7 +57,7 @@ function readSkills() {
               .filter(Boolean)
           }
         }
-        skills.push({ name, description, triggers, content })
+        skills.push({ name, description, triggers, content, location: path.join(skillsDir, dir.name) })
       }
     }
   } catch {}

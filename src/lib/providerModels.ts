@@ -4,6 +4,7 @@
 
 import { PROVIDER_TEMPLATES } from '@/config/providerTemplates'
 import { isElectron, getAPI } from './ipc'
+import { loadAllApiKeys } from './secret'
 
 export interface DynamicModel {
   id: string
@@ -91,13 +92,7 @@ async function fetchAnthropicModels(
  * 加载已配置 Provider 的 API Keys
  */
 async function loadApiKeys(): Promise<Record<string, string>> {
-  if (!isElectron()) return {}
-  try {
-    const raw = await getAPI().settings.get('apiKeys')
-    return raw ? JSON.parse(raw) : {}
-  } catch {
-    return {}
-  }
+  return loadAllApiKeys()
 }
 
 /**

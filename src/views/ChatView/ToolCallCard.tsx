@@ -10,16 +10,17 @@ interface ToolCallCardProps {
 }
 
 /** 工具图标映射 */
-function getToolIcon(toolName: string) {
-  if (toolName.includes('file') || toolName.includes('read') || toolName.includes('write')) return FileText
-  if (toolName.includes('bash') || toolName.includes('shell') || toolName.includes('exec')) return Terminal
-  if (toolName.includes('search') || toolName.includes('find') || toolName.includes('glob')) return FolderOpen
+function getToolIcon(toolName?: string) {
+  const name = toolName || ''
+  if (name.includes('file') || name.includes('read') || name.includes('write')) return FileText
+  if (name.includes('bash') || name.includes('shell') || name.includes('exec')) return Terminal
+  if (name.includes('search') || name.includes('find') || name.includes('glob')) return FolderOpen
   return Wrench
 }
 
 /** 工具名称美化 */
-function formatToolName(toolName: string): string {
-  return toolName
+function formatToolName(toolName?: string): string {
+  return (toolName || 'tool')
     .replace(/_/g, ' ')
     .replace(/\b\w/g, c => c.toUpperCase())
 }

@@ -2,74 +2,20 @@
 // 支持文本、推理、工具调用、步骤标记等 part 类型
 
 import { marked } from 'marked'
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import DOMPurify from 'dompurify'
 import type { MessageWithParts, Part, TextPart, ReasoningPart, ToolPart, StepStartPart, StepFinishPart } from '@/lib/mimoTypes'
-import { Copy, Check, Brain, Wrench, ChevronDown, ChevronRight } from 'lucide-react'
-import { useState } from 'react'
+import { Brain, Wrench, ChevronDown, ChevronRight } from 'lucide-react'
+import { useState, useMemo, memo } from 'react'
 import ToolCallCard from './ToolCallCard'
 
 marked.setOptions({ gfm: true, breaks: true })
 
-// === Code Block ===
-
-function CodeBlock({ language, code }: { language: string; code: string }) {
-  const [copied, setCopied] = useState(false)
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(code)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
-
-  return (
-    <div className="relative group my-2">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-mc-surface border border-mc-border rounded-t-lg border-b-0">
-        <span className="text-[10px] text-mc-text-muted font-mono">{language || 'text'}</span>
-        <button
-          onClick={handleCopy}
-          className="flex items-center gap-1 text-[10px] text-mc-text-muted hover:text-mc-text transition-colors"
-        >
-          {copied ? <Check size={10} /> : <Copy size={10} />}
-          {copied ? '已复制' : '复制'}
-        </button>
-      </div>
-      <SyntaxHighlighter
-        style={oneDark}
-        language={language || 'text'}
-        PreTag="div"
-        customStyle={{
-          margin: 0,
-          borderRadius: '0 0 8px 8px',
-          background: 'var(--code-bg)',
-          border: '1px solid var(--border-default)',
-          borderTop: 'none',
-          fontSize: '12px',
-          lineHeight: '1.6',
-          padding: '12px',
-        }}
-      >
-        {code}
-      </SyntaxHighlighter>
-    </div>
-  )
-}
-
-// === Markdown 自定义 renderer ===
-
-const renderer = new marked.Renderer()
-renderer.code = function ({ text, lang }) {
-  const language = lang || ''
-  return `<div class="code-block" data-lang="${language}">${escapeHtml(text)}</div>`
-}
-
-function escapeHtml(text: string) {
-  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-}
+// === Markdown 渲染 ===
+// 走 marked 默认 renderer 输出 <pre><code class="language-xxx">，
+// DOMPurify 兜底防 XSS；样式由 globals.css 的 .markdown-content pre/code 提供
 
 function parseMarkdown(content: string): string {
-  const html = marked.parse(content, { renderer }) as string
+  const html = marked.parse(content) as string
   return DOMPurify.sanitize(html)
 }
 
@@ -143,7 +89,7 @@ interface MessageBubbleProps {
   message: MessageWithParts
 }
 
-export default function MessageBubble({ message }: MessageBubbleProps) {
+export default memo(function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.info.role === 'user'
 
   // 将 parts 分组：按 step-start/step-finish 划分步骤
@@ -200,21 +146,28 @@ export default function MessageBubble({ message }: MessageBubbleProps) {
       </div>
     </div>
   )
-}
+})
+
+// === 文本 Part 渲染（带 useMemo 缓存 markdown 解析结果）===
+
+const TextPartView = memo(function TextPartView({ part }: { part: { id: string; text: string } }) {
+  const html = useMemo(() => parseMarkdown(part.text), [part.text])
+  if (!part.text) return null
+  return (
+    <div
+      key={part.id}
+      className="markdown-content text-sm leading-relaxed"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  )
+})
 
 // === Part 渲染 ===
 
 function renderPart(part: Part): React.ReactNode {
   switch (part.type) {
     case 'text':
-      if (!part.text) return null
-      return (
-        <div
-          key={part.id}
-          className="markdown-content text-sm leading-relaxed"
-          dangerouslySetInnerHTML={{ __html: parseMarkdown(part.text) }}
-        />
-      )
+      return <TextPartView key={part.id} part={part} />
 
     case 'reasoning':
       if (!part.text) return null

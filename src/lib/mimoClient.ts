@@ -236,13 +236,13 @@ export class MimoClient {
   // === PTY（终端）API ===
 
   async listPtys(): Promise<any[]> {
-    const res = await this.fetch('/pty/')
+    const res = await this.fetch('/pty')
     if (!res.ok) throw new Error(`listPtys failed: ${res.status}`)
     return res.json()
   }
 
   async createPty(opts?: { shell?: string; cwd?: string; env?: Record<string, string> }): Promise<{ id: string }> {
-    const res = await this.fetch('/pty/', {
+    const res = await this.fetch('/pty', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(opts || {}),
@@ -328,7 +328,6 @@ export class MimoClient {
       const url = `${this.baseUrl}/global/event`
       const headers: Record<string, string> = {
         'Accept': 'text/event-stream',
-        'Cache-Control': 'no-cache',
       }
       if (this.password) {
         headers['Authorization'] = `Basic ${btoa(`opencode:${this.password}`)}`
@@ -342,6 +341,9 @@ export class MimoClient {
 
       if (!response.ok) {
         console.error('[MimoClient] SSE connection failed:', response.status)
+        this.connecting = false
+        this.connected = false
+        this.notifyConnectionChange(false)
         this.scheduleReconnect()
         return
       }
@@ -399,13 +401,13 @@ export class MimoClient {
   }
 
   private dispatchEvent(event: GlobalSSEEvent) {
-    const payload = event.payload
+    const payload = event.payload as any
     if (!payload || !payload.type) return
 
     // SyncEvent 解包：{ type: "sync", syncEvent: { type: "message.updated.v1", data, ... } }
     // 将版本化的 type（如 "message.updated.v1"）转为 BusEvent type（"message.updated"）
     if (payload.type === 'sync') {
-      const syncEvent = (payload as any).syncEvent
+      const syncEvent = payload.syncEvent
       if (!syncEvent || !syncEvent.type) return
       // 去除版本后缀： "message.updated.v1" → "message.updated"
       const baseType = syncEvent.type.replace(/\.v\d+$/, '')
@@ -417,6 +419,14 @@ export class MimoClient {
       return
     }
 
+    // 非 sync 事件：某些服务端版本可能不带 .properties 包装
+    if (!payload.properties && typeof payload === 'object') {
+      const { type, ...rest } = payload as any
+      if (Object.keys(rest).length > 0) {
+        this.emitPayload({ type: payload.type, properties: rest } as SSEEventPayload, event)
+        return
+      }
+    }
     this.emitPayload(payload, event)
   }
 

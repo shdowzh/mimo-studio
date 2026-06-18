@@ -19,8 +19,8 @@ const { getMimoDataDir } = require('./database.cjs')
 const GITEE_RELEASE_BASE = 'https://gitee.com/mirrors/mimocode/releases/download'
 const GITHUB_RELEASE_BASE = 'https://github.com/XiaomiMiMo/MiMo-Code/releases/latest/download'
 
-// CLI 版本号（用于构造 Gitee 下载 URL）
-const CLI_VERSION = 'v0.1.0'
+// CLI 版本号（可通过 MIMO_CLI_VERSION 环境变量覆盖，方便发版同步）
+const CLI_VERSION = process.env.MIMO_CLI_VERSION || 'v0.1.0'
 
 /**
  * 根据当前平台获取预编译二进制的下载文件名
@@ -383,7 +383,11 @@ function downloadFile(url, destPath, onProgress) {
 function extractZip(archivePath, destDir) {
   return new Promise((resolve, reject) => {
     if (os.platform() === 'win32') {
-      const psCmd = `powershell -NoProfile -Command "Expand-Archive -Path '${archivePath}' -DestinationPath '${destDir}' -Force"`
+      // 用 -LiteralPath 避免路径中特殊字符（单引号、#、$ 等）被 PowerShell 解释
+      // 路径由 app 内部生成，不含用户输入，但防御性转义仍必要
+      const escPath = archivePath.replace(/'/g, "''")
+      const escDest = destDir.replace(/'/g, "''")
+      const psCmd = `powershell -NoProfile -Command "Expand-Archive -LiteralPath '${escPath}' -DestinationPath '${escDest}' -Force"`
       exec(psCmd, (error) => { if (error) reject(error); else resolve() })
     } else {
       exec(`unzip -o "${archivePath}" -d "${destDir}"`, (error) => { if (error) reject(error); else resolve() })

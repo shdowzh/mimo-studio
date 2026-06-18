@@ -81,10 +81,16 @@ export default function McpView() {
         <div className="flex items-center gap-2">
           <Plug size={14} strokeWidth={1.5} className="text-mc-text-muted" />
           <span className="text-xs font-medium text-mc-text-secondary">MCP 服务器</span>
+          <span className="text-[9px] text-mc-text-muted bg-mc-elevated px-1.5 py-0.5 rounded">仅本地配置</span>
         </div>
         <Button variant="ghost" size="sm" icon={<Plus size={12} />} onClick={() => setAddModalOpen(true)}>
           添加
         </Button>
+      </div>
+
+      {/* 仅本地提示 */}
+      <div className="px-4 py-2 border-b border-mc-border-subtle/50 bg-amber-500/5">
+        <p className="text-[10px] text-amber-600">此处配置仅保存在本地，MCP 服务器需由 MiMo Serve 启动和管理。连接 MiMo Serve 后，Agent 将自动加载已启用的 MCP 服务器。</p>
       </div>
 
       {/* Server list */}

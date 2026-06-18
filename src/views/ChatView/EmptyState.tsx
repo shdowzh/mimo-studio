@@ -1,9 +1,10 @@
 // 空状态 — 根据连接和配置状态给出引导
 
 import { useState, useEffect } from 'react'
-import { useChatStore } from '@/stores/chatStore'
+import { useChatStore, selectors } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
-import { isElectron, getAPI } from '@/lib/ipc'
+import { isElectron } from '@/lib/ipc'
+import { listApiKeyProviders } from '@/lib/secret'
 import { Download, Settings } from 'lucide-react'
 
 const QUICK_PROMPTS = [
@@ -15,18 +16,17 @@ const QUICK_PROMPTS = [
 
 export default function EmptyState() {
   const sendMessage = useChatStore((s) => s.sendMessage)
-  const serverConnected = useChatStore((s) => s.serverConnected)
-  const serverReady = useChatStore((s) => s.serverReady)
-  const initError = useChatStore((s) => s.initError)
+  const serverConnected = useChatStore(selectors.serverConnected)
+  const serverReady = useChatStore(selectors.serverReady)
+  const initError = useChatStore(selectors.initError)
   const retryInit = useChatStore((s) => s.retryInit)
   const [hasApiKeys, setHasApiKeys] = useState(false)
   const [checking, setChecking] = useState(true)
 
   useEffect(() => {
     if (!isElectron()) { setChecking(false); return }
-    getAPI().settings.get('apiKeys').then(raw => {
-      const keys = raw ? JSON.parse(raw) : {}
-      setHasApiKeys(Object.values(keys).some(v => typeof v === 'string' && v.trim()))
+    listApiKeyProviders().then(providers => {
+      setHasApiKeys(providers.length > 0)
       setChecking(false)
     }).catch(() => { setChecking(false) })
   }, [])

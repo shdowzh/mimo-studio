@@ -158,7 +158,7 @@ mimo-studio/
 │       ├── database.cjs         # SQLite：settings 表
 │       ├── files.cjs            # 文件 I/O：Memory、Skills 读写
 │       ├── mimoInstaller.cjs    # MiMo CLI 检测与安装
-│       └── auth.cjs             # JWT Bootstrap（MiMo Free 认证，已废弃）
+│       └── secret.cjs            # safeStorage 封装（API Key 加密）
 ├── src/                         # 渲染进程
 │   ├── lib/
 │   │   ├── mimoTypes.ts         # 类型定义（Part 多态、SSE 事件、Session、Skill 等）
@@ -668,6 +668,85 @@ onDone → store 写入完整消息 + idle 状态
 - `package.json` — NSIS 安装目录选择 + `opencode:build` 脚本 + `opencode-dist/` 打包配置
 - `scripts/release.cjs` — 构建前尝试编译 opencode
 - `.gitignore` — 排除 `opencode-dist/`
+
+### V6 → V7 打包后启动黑屏与对话流稳定性（2026-06-18）
+
+**背景：** V6 打包后双击 exe 出现黑屏不显示界面，即使界面出来也卡在「正在初始化 MiMo 服务...」、对话发出后无回复、技能页打开崩溃、终端不可用。逐项排查后发现一连串相互独立的问题，从 Electron 协议加载、SSE 鉴权、状态机、SSE 事件批量更新顺序到服务端 PTY 路径都有 bug。
+
+**故障根因（排查顺序）：**
+
+| # | 现象 | 根因 |
+|---|------|------|
+| 1 | 双击 exe 黑屏，无任何报错 | Electron 用 `file://` 加载页面，`<script type="module">` 触发 CORS 检查，`file://` 不返 CORS 头被 Chromium 拦截 |
+| 2 | electron-updater 抛 `ENOENT app-update.yml` | 打包配置缺少 `publish` 字段时 `electron-updater` 直接 require 即抛 |
+| 3 | 启动失败完全静默 | `app.whenReady` 链没有 try-catch，初始化任意一步抛错窗口都不出现 |
+| 4 | SSE 流到来后渲染层 ReferenceError | `chatStore.ts` 用了 `applyMergedDelta` 但漏 import |
+| 5 | 自定义 Provider 保存失败 | `SettingsView` 用 `useState` 解构出 `setApiKey`，遮蔽了 `@/lib/secret` 同名函数 |
+| 6 | 技能页一打开就 `Cannot read properties of undefined (reading 'includes')` | 本地 `files.cjs` 的 `readSkills()` 返回的对象缺 `location` 字段，渲染层直接调 `skill.location.includes('.bundle')` 崩溃 |
+| 7 | 自定义协议返回 403 | `path.normalize('/dist/index.html')` 在 Windows 上被解释为绝对路径 `D:\dist\...`，落到 baseDir 之外被防穿越拦截 |
+| 8 | SSE 始终 401 | streaming.cjs 给 `MIMOCODE_SERVER_PASSWORD` 生成了随机密码，但 mimo serve 的 `/global/event` 仅在空密码时放行，密码注入反而打破契约 |
+| 9 | 服务卡在「正在初始化」 | SSE 401 后没通知 `connectionChange(false)`，store 永远停在 `initializing` |
+| 10 | 第一句回复后续不更新 | rAF 批量更新里同帧 `message.updated` 被同帧 `part.updated` 浅合并覆盖；`pendingUpdates.reduce({...})` 浅合并 `messages` 字段直接丢失先到的更新 |
+| 11 | 一直「Agent 执行中」无法发新消息 | `session.idle` 事件未注册 handler，busy 状态无法回到 idle |
+| 12 | 消息已到达但界面不显示 | Virtuoso 容器 `flex-1` 但父容器 flex 收缩导致高度为 0，频繁报 `Zero-sized element` 警告 |
+| 13 | `applyMergedDelta` 直接 mutate part 对象 | Zustand 浅比较看不到引用变化，渲染层不更新 |
+| 14 | 终端开不起来 | mimo serve PTY 接口路径是 `/pty`，旧代码写成 `/pty/`，服务端返 503「Web UI is temporarily unavailable」，fallback 到本地 cmd 又不是真 PTY |
+
+**关键修复：**
+
+| 模块 | 旧实现 | 新实现 |
+|------|--------|--------|
+| 协议加载 | `mainWindow.loadFile()` 走 file:// | 注册 `mimo-app://` 自定义协议（`registerSchemesAsPrivileged` + `protocol.handle`），返回 `Access-Control-Allow-Origin: *`，所有静态资源走该协议 |
+| 路径解析 | `path.normalize(url.pathname.replace(/^\/app\//, ''))` | `replace(/^\//, '')` 去前导 `/` 避免 Windows 把 pathname 当绝对路径 |
+| 启动健壮性 | 无错误兜底 | `app.whenReady` 全程 try-catch + `dialog.showErrorBox` + `process.on('uncaughtException')` 兜底；electron-updater 加 try/catch require + 调用前空值检查 |
+| 文件日志 | 无 | `mimo-debug.log` 写到 exe 同目录，记录主进程事件 + 渲染进程 console + 协议每次请求 + WebContents `did-fail-load` |
+| Serve 密码 | 随机 32 byte | 强制空密码（mimo serve 的 SSE 端点契约）|
+| `applyMergedDelta` 导入 | 缺 | `chatStore.ts` 导入 |
+| `applyMergedDelta` 实现 | mutate 原 part | 不可变更新（新 parts、新 msg、新 messages map） |
+| SSE 批量更新 | rAF 队列 + reduce 浅合并 | 非 delta 事件即时 set；delta 走 rAF 队列；处理 delta 时若有未刷的 message.updated 走最新 state |
+| `handlePartUpdated` | sessionMsgs 不存在直接 return null | sessionMsgs 不存在时创建 placeholder message，等 `message.updated` 补齐 info |
+| `session.idle` | 无 handler | 新增 `handleSessionIdle`，sessionID 缺失时用 `state.currentSessionID` 兜底 |
+| `session.status` | 假定 `payload.properties.status` | 兼容 raw payload + `status` / `type` 两种结构 |
+| SSE 401 | 不通知 store | 通知 `connectionChange(false)`，状态机退出 initializing |
+| 消息列表 | react-virtuoso（容器高度 0 时不渲染） | 普通滚动列表 + auto scroll-to-bottom；移除虚拟滚动避免高度依赖 |
+| `skill.location` | 渲染层假定存在 | 服务端返回的本地技能现在带 `location: <skillsDir/name>`；渲染层加 `(skill.location \|\| '')` 兜底 |
+| Settings setApiKey 遮蔽 | `setApiKey` 与 import 同名 | 重命名 useState setter 为 `setApiKeyInput` |
+| 终端 PTY 路径 | `/pty/` | `/pty`（trailing slash 触发 503）|
+| 终端 fallback shell | `windowsHide: true` 无 args | `windowsHide: false`，cmd 加 `/K` 保持交互 |
+| 终端容器 | `flex-1` | `flex-1 + minHeight: 0`，避免 flex 收缩导致 xterm 容器高度 0 |
+| 直连模式用户消息 | onTextDelta 才入 store | 进入 `sendViaDirectChat` 立即把 user message 写入 store；directChat `onDone` 把返回消息的 `id/sessionID` 规范化到 placeholder ID |
+| ChatView showEmpty | `messages[currentSessionID]?.length`（messages 已经是数组） | `!messages.length` |
+| ChatView messages selector | 每次返回新数组导致 React 18 抛 #185 | `useMemo([currentSessionID, allMessages])` |
+
+**新建文件：**
+- 无（全部为修复，未新增模块）
+
+**修改文件：**
+- `electron/main.cjs` — 自定义协议 + path 兜底 + 启动 try-catch + 全局异常 handler + 文件日志 + electron-updater 安全加载
+- `electron/services/streaming.cjs` — 强制空密码（保留 `getMimoServePassword` 兼容已调用点）
+- `electron/services/files.cjs` — 本地技能补 `location` 字段
+- `index.html` — 启动期诊断 overlay（加载中 / JS 错误 / 模块加载失败 / 3s 后 root 仍为空），方便用户在 prod 排错
+- `src/main.tsx` — React 渲染前隐藏诊断 loading
+- `vite.config.ts` — `transformIndexHtml` 移除 `crossorigin` 属性（防御性，配合协议改造）
+- `src/App.tsx` — `mimoClient.onConnectionChange` 触发 `retryInit()`，避免依赖 `server.connected` SSE 事件
+- `src/lib/mimoClient.ts` — SSE 401 通知 `connectionChange(false)`、不带 `properties` 时自动展平 raw 字段、`pty/` → `pty`
+- `src/stores/chatStore.ts` — 即时 set 非 delta 事件 + rAF 仅 delta + 多次 delta 合并使用最新 state + `applyMergedDelta` 导入
+- `src/stores/sseHandlers.ts` — `applyMergedDelta` 改为不可变更新；`handlePartUpdated` 创建 placeholder；新增 `handleSessionIdle`；`handleSessionStatus` 兜底
+- `src/stores/chatFlow.ts` — 直连用户消息立即入 store；`onDone` 规范化 final 消息 id/sessionID
+- `src/views/ChatView/index.tsx` — `showEmpty` 修正 + messages selector `useMemo`
+- `src/views/ChatView/MessageList.tsx` — react-virtuoso → 普通滚动列表 + auto-scroll
+- `src/views/ChatView/ToolCallCard.tsx` — `toolName` 兜底防 undefined.includes
+- `src/views/SettingsView/index.tsx` — `useState setApiKey` 改名 `setApiKeyInput`
+- `src/views/SkillsView/index.tsx` — `skill.location` 兜底
+- `src/views/TerminalView/index.tsx` — 容器 `minHeight: 0`，setup 加 try-catch
+- `package.json` — 版本 1.0.0 → 1.1.0
+
+**调试与诊断方案（沉淀）：**
+- 凡是 prod 黑屏 / 无报错的问题，**先加 `mimo-debug.log` 文件日志**（exe 同目录），把主进程 + 渲染进程 console + 协议请求 + WebContents fail/finish 事件全写进去。比凭直觉改代码省 5 倍以上时间。
+- Electron 主进程加载 ESM 必须用自定义协议或 dev server，`file://` 不行。
+- SSE rAF 批量更新需要保证「依赖事件先 set」+「自身事件再合并」的顺序；reduce 浅合并 `messages` 是隐式 bug。
+- 不可变更新原则：handler 内不能 mutate 入参，否则 zustand/React 渲染失效。
+- 服务端 API 路径要逐个测，trailing slash 是常见 503 来源。
 
 ---
 

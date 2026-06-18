@@ -4,6 +4,7 @@
 
 const { spawn } = require('child_process')
 const { createServer } = require('net')
+const crypto = require('crypto')
 const path = require('path')
 const fs = require('fs')
 const os = require('os')
@@ -13,6 +14,7 @@ const { detect: mimoDetect, install: mimoInstall, installSilent } = require('./m
 let serverListener = null      // 嵌入模式：Server.Listener { stop() }
 let mimoServeProcess = null   // spawn 模式：ChildProcess
 let mimoServePort = 0
+let mimoServePassword = ''
 let mimoServeReady = false
 let mode = 'unknown'          // 'embedded' | 'spawn'
 
@@ -26,6 +28,15 @@ function isMimoServeRunning() {
 
 function getMimoServePort() {
   return mimoServePort
+}
+
+function getMimoServePassword() {
+  return mimoServePassword
+}
+
+function ensurePassword() {
+  // 不生成随机密码 — MiMo serve 的 SSE 端点不支持非空密码
+  return ''
 }
 
 /** 返回当前模式：'embedded' | 'spawn' | 'unknown' */
@@ -111,6 +122,7 @@ function stopMimoServe() {
 
   mimoServeReady = false
   mimoServePort = 0
+  mimoServePassword = ''
   mode = 'unknown'
 }
 
@@ -119,6 +131,7 @@ function stopMimoServe() {
 // ================================================================
 
 async function startEmbedded() {
+  const password = ensurePassword()
   const serverPath = findOpencodeDist()
   if (!serverPath) {
     throw new Error('No compiled opencode server found. ' +
@@ -143,7 +156,7 @@ async function startEmbedded() {
     port,
     hostname: '127.0.0.1',
     username: 'opencode',
-    password: '',
+    password,
   })
 
   // 轮询等待健康检查通过
@@ -183,6 +196,7 @@ function findOpencodeDist() {
 // ================================================================
 
 async function startViaSpawn() {
+  const password = ensurePassword()
   // 检测 CLI 是否可用
   let cliInfo = await mimoDetect()
   if (!cliInfo.installed) {
@@ -228,7 +242,7 @@ async function startViaSpawn() {
       mimoServeProcess = spawn(command, args, {
         stdio: 'pipe',
         detached: false,
-        env: { ...process.env, MIMOCODE_SERVER_PASSWORD: '' },
+        env: { ...process.env, MIMOCODE_SERVER_PASSWORD: password },
       })
 
       mimoServeProcess.on('error', () => {
@@ -294,10 +308,14 @@ function findFreePort(start, end) {
 async function waitForHealth(port, timeout) {
   const deadline = Date.now() + timeout
   const url = `http://127.0.0.1:${port}/global/health`
+  const auth = mimoServePassword
+    ? 'Basic ' + Buffer.from(`opencode:${mimoServePassword}`).toString('base64')
+    : null
 
   while (Date.now() < deadline) {
     try {
-      const res = await fetch(url, { signal: AbortSignal.timeout(3000) })
+      const headers = auth ? { Authorization: auth } : undefined
+      const res = await fetch(url, { signal: AbortSignal.timeout(3000), headers })
       if (res.ok) return
     } catch {
       // 还没就绪
@@ -331,5 +349,6 @@ module.exports = {
   stopMimoServe,
   isMimoServeRunning,
   getMimoServePort,
+  getMimoServePassword,
   getServeMode,
 }

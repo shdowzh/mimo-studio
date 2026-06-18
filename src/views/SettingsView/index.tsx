@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import { isElectron, getAPI } from '@/lib/ipc'
+import { loadAllApiKeys, setApiKey, deleteApiKey } from '@/lib/secret'
 import { useMimoInstaller } from '@/hooks/useMimoInstaller'
 import { Settings as SettingsIcon, Palette, Info, Shield, RefreshCw, Download, AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
 import { useThemeStore, THEMES, type ThemeId } from '@/stores/themeStore'
 import { useUIStore } from '@/stores/uiStore'
-import { useChatStore } from '@/stores/chatStore'
+import { useChatStore, selectors } from '@/stores/chatStore'
 import { PROVIDER_TEMPLATES } from '@/config/providerTemplates'
 
 type SettingsTab = 'appearance' | 'providers' | 'about'
@@ -121,17 +122,16 @@ function ProvidersTab() {
   const [dynamicModels, setDynamicModels] = useState<Record<string, { id: string; name: string }[]>>({})
   const [fetchingModels, setFetchingModels] = useState<Record<string, boolean>>({})
 
-  // 响应式：从 zustand 读取 server 状态（不再做一次性检查）
-  const serverConnected = useChatStore((s) => s.serverConnected)
-  const serverReady = useChatStore((s) => s.serverReady)
+  // 响应式：从 zustand 读取 server 状态
+  const serverConnected = useChatStore(selectors.serverConnected)
+  const serverReady = useChatStore(selectors.serverReady)
   const serverOk = serverConnected || serverReady
 
   useEffect(() => { loadKeys() }, [])
 
   const loadKeys = async () => {
     if (!isElectron()) return
-    const raw = await getAPI().settings.get('apiKeys')
-    const keys = raw ? JSON.parse(raw) : {}
+    const keys = await loadAllApiKeys()
     setApiKeys(keys)
     // 加载已配置 Provider 的动态模型
     refreshAllModels(keys)
@@ -148,7 +148,7 @@ function ProvidersTab() {
         if (result && result.fetched) {
           newModels[pid] = result.models.map(m => ({ id: m.id, name: m.name || m.id }))
         }
-      } catch {}
+      } catch (e) { console.warn('[SettingsView] refresh dyn models failed:', e) }
       setFetchingModels(prev => ({ ...prev, [pid]: false }))
     }
     setDynamicModels(prev => ({ ...prev, ...newModels }))
@@ -157,43 +157,47 @@ function ProvidersTab() {
   const saveKey = async (id: string, key: string) => {
     if (!isElectron()) return
     setSaving(id)
-    const keys = { ...apiKeys }
-    if (key.trim()) {
-      keys[id] = key.trim()
+    const trimmed = key.trim()
+    // 1. 加密写入本地
+    if (trimmed) {
+      await setApiKey(id, trimmed)
     } else {
-      delete keys[id]
+      await deleteApiKey(id)
     }
-    // 1. 存本地
-    await getAPI().settings.set('apiKeys', JSON.stringify(keys))
-    setApiKeys(keys)
+    setApiKeys(prev => {
+      const next = { ...prev }
+      if (trimmed) next[id] = trimmed
+      else delete next[id]
+      return next
+    })
 
     // 2. 如果 MiMo Serve 在线，同步到服务端
     if (serverOk) {
       try {
         const { mimoClient } = await import('@/lib/mimoClient')
-        if (key.trim()) {
-          await mimoClient.setAuth(id, key.trim())
+        if (trimmed) {
+          await mimoClient.setAuth(id, trimmed)
         } else {
           await mimoClient.removeAuth(id).catch(() => {})
         }
-      } catch { /* 服务端同步失败不阻塞 */ }
+      } catch (e) { console.warn('[SettingsView] sync key to server failed:', e) }
     }
 
     setSaving(null)
 
     // Key 变更后刷新模型列表
-    if (key.trim()) {
+    if (trimmed) {
       const { fetchModelsForProvider } = await import('@/lib/providerModels')
       setFetchingModels(prev => ({ ...prev, [id]: true }))
       try {
-        const result = await fetchModelsForProvider(id, key.trim())
+        const result = await fetchModelsForProvider(id, trimmed)
         if (result && result.fetched) {
           setDynamicModels(prev => ({
             ...prev,
             [id]: result.models.map(m => ({ id: m.id, name: m.name || m.id })),
           }))
         }
-      } catch {}
+      } catch (e) { console.warn('[SettingsView] fetch models failed:', e) }
       setFetchingModels(prev => ({ ...prev, [id]: false }))
     } else {
       setDynamicModels(prev => {
@@ -243,7 +247,7 @@ function ProvidersTab() {
                   <Shield size={13} strokeWidth={1.5} className={isConfigured ? 'text-mc-success' : 'text-mc-text-muted'} />
                   <h4 className="text-xs font-medium text-mc-text">{tpl.name}</h4>
                   {isConfigured && <span className="text-[9px] text-mc-success bg-mc-success/5 px-1.5 py-0.5 rounded">已配置</span>}
-                  {dynModels && <span className="text-[9px] text-mc-success bg-mc-success/5 px-1.5 py-0.5 rounded" title="已从 API 获取 {dynModels.length} 个模型">🔄 {dynModels.length} 个模型</span>}
+                  {dynModels && <span className="text-[9px] text-mc-success bg-mc-success/5 px-1.5 py-0.5 rounded" title={`已从 API 获取 ${dynModels.length} 个模型`}>🔄 {dynModels.length} 个模型</span>}
                   {isFetching && <RefreshCw size={10} className="animate-spin text-mc-accent" />}
                   {tpl.website && (
                     <a href={tpl.website} target="_blank" rel="noopener"
@@ -291,7 +295,7 @@ function CustomProviderCard({ apiKeys, serverOk, onKeysUpdate }: {
 }) {
   const [name, setName] = useState('')
   const [endpoint, setEndpoint] = useState('')
-  const [apiKey, setApiKey] = useState('')
+  const [apiKey, setApiKeyInput] = useState('')
   const [saved, setSaved] = useState(false)
 
   if (saved) {
@@ -322,7 +326,7 @@ function CustomProviderCard({ apiKeys, serverOk, onKeysUpdate }: {
           className="w-full bg-mc-bg border border-mc-border rounded-lg px-3 py-1.5 text-xs text-mc-text focus:outline-none focus:border-mc-border-focus"
         />
         <div className="flex items-center gap-2">
-          <input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)}
+          <input type="password" value={apiKey} onChange={(e) => setApiKeyInput(e.target.value)}
             placeholder="API Key（本地部署可不填）"
             className="flex-1 bg-mc-bg border border-mc-border rounded-lg px-3 py-1.5 text-xs text-mc-text focus:outline-none focus:border-mc-border-focus"
           />
@@ -330,9 +334,10 @@ function CustomProviderCard({ apiKeys, serverOk, onKeysUpdate }: {
             onClick={async () => {
               if (!name.trim() || !endpoint.trim()) return
               const customId = 'custom_' + name.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')
-              // 保存到 apiKeys
-              const keys = { ...apiKeys, [customId]: apiKey.trim() || 'none' }
-              await getAPI().settings.set('apiKeys', JSON.stringify(keys))
+              // 加密保存 API Key（自定义 provider 即使没填 key 也存个占位，方便后续校验存在性）
+              const keyValue = apiKey.trim() || 'none'
+              await setApiKey(customId, keyValue)
+              const keys = { ...apiKeys, [customId]: keyValue }
               // 保存 Provider 元数据
               const existingRaw = await getAPI().settings.get('customProviders')
               const existing = existingRaw ? JSON.parse(existingRaw) : []
@@ -341,7 +346,7 @@ function CustomProviderCard({ apiKeys, serverOk, onKeysUpdate }: {
               // 同步到服务端
               if (serverOk && apiKey.trim()) {
                 const { mimoClient } = await import('@/lib/mimoClient')
-                mimoClient.setAuth(customId, apiKey.trim()).catch(() => {})
+                mimoClient.setAuth(customId, apiKey.trim()).catch((e) => console.warn('[SettingsView] custom setAuth failed:', e))
               }
               onKeysUpdate(keys)
               setSaved(true)
@@ -413,11 +418,56 @@ function MimoCliInstall() {
 
 // === About ===
 function AboutTab() {
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error'>('idle')
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null)
+  const [updateProgress, setUpdateProgress] = useState(0)
+
+  useEffect(() => {
+    if (!isElectron()) return
+    const api = getAPI()
+    const unsub1 = api.updater.onAvailable((data) => {
+      setUpdateStatus('available')
+      setUpdateVersion(data.version)
+    })
+    const unsub2 = api.updater.onProgress((data) => {
+      setUpdateStatus('downloading')
+      setUpdateProgress(Math.round(data.percent))
+    })
+    const unsub3 = api.updater.onDownloaded((data) => {
+      setUpdateStatus('downloaded')
+      setUpdateVersion(data.version)
+    })
+    return () => { unsub1(); unsub2(); unsub3() }
+  }, [])
+
+  const handleCheckUpdate = async () => {
+    if (!isElectron()) return
+    setUpdateStatus('checking')
+    try {
+      const result = await getAPI().updater.check()
+      if (result.error) {
+        setUpdateStatus('error')
+      } else if (result.available) {
+        setUpdateStatus('available')
+        setUpdateVersion(result.version || null)
+      } else {
+        setUpdateStatus('up-to-date')
+      }
+    } catch {
+      setUpdateStatus('error')
+    }
+  }
+
+  const handleInstallUpdate = () => {
+    if (!isElectron()) return
+    getAPI().updater.install()
+  }
+
   return (
     <div className="max-w-lg space-y-4">
       <div className="text-center py-4 space-y-2">
         <h2 className="text-lg font-light text-mc-text">MiMo Studio</h2>
-        <p className="text-xs text-mc-text-muted">v1.0.0</p>
+        <p className="text-xs text-mc-text-muted">v{__APP_VERSION__}</p>
         <p className="text-[10px] text-mc-text-muted">基于 MiMo Code 开源项目 · AI Agent 编码工作站</p>
       </div>
       <div className="mc-card p-4 space-y-2 text-xs text-mc-text-secondary">
@@ -432,6 +482,33 @@ function AboutTab() {
         <div className="flex justify-between">
           <span className="text-mc-text-muted">数据目录</span>
           <span className="text-mc-text-muted font-mono text-[10px]">~/.mimocode/</span>
+        </div>
+      </div>
+      {/* 更新检查 */}
+      <div className="mc-card p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="text-xs text-mc-text-secondary">版本更新</span>
+          {updateStatus === 'idle' && (
+            <button onClick={handleCheckUpdate} className="text-[10px] px-3 py-1 rounded bg-mc-elevated text-mc-text-muted hover:text-mc-text transition-colors">检查更新</button>
+          )}
+          {updateStatus === 'checking' && (
+            <span className="text-[10px] text-mc-text-muted">检查中...</span>
+          )}
+          {updateStatus === 'up-to-date' && (
+            <span className="text-[10px] text-mc-success">已是最新版本</span>
+          )}
+          {updateStatus === 'available' && (
+            <span className="text-[10px] text-mc-accent">发现新版本 v{updateVersion}，下载中...</span>
+          )}
+          {updateStatus === 'downloading' && (
+            <span className="text-[10px] text-mc-accent">下载中 {updateProgress}%</span>
+          )}
+          {updateStatus === 'downloaded' && (
+            <button onClick={handleInstallUpdate} className="text-[10px] px-3 py-1 rounded bg-mc-accent text-white hover:opacity-90 transition-opacity">重启安装 v{updateVersion}</button>
+          )}
+          {updateStatus === 'error' && (
+            <button onClick={handleCheckUpdate} className="text-[10px] text-mc-error hover:underline">检查失败，重试</button>
+          )}
         </div>
       </div>
     </div>

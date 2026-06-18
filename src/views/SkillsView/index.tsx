@@ -2,7 +2,7 @@
 // 服务端自动发现：compose 内置技能 + 用户目录 + 项目目录技能
 
 import { useState, useEffect } from 'react'
-import { useChatStore } from '@/stores/chatStore'
+import { useChatStore, selectors } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 import { isElectron, getAPI } from '@/lib/ipc'
 import { mimoClient } from '@/lib/mimoClient'
@@ -33,7 +33,7 @@ export default function SkillsView() {
   // 当 serverReady 变为 true 时重新加载技能（首次初始化完成后）
   useEffect(() => {
     const unsub = useChatStore.subscribe((state, prev) => {
-      if (state.serverReady && !prev.serverReady) {
+      if (selectors.serverReady(state) && !selectors.serverReady(prev)) {
         loadSkills()
       }
     })
@@ -160,7 +160,7 @@ export default function SkillsView() {
 
   // 判断是否为 compose 内置技能（location 包含 compose bundle 路径）
   const isComposeSkill = (skill: SkillInfo): boolean => {
-    return skill.location.includes('.bundle') || skill.location.includes('compose')
+    return (skill.location || '').includes('.bundle') || (skill.location || '').includes('compose')
   }
 
   const composeSkills = availableSkills.filter(isComposeSkill)
@@ -434,7 +434,7 @@ function SkillStoreTab({ skills, onView, onDownload, onDirectDownload, downloadi
             <SkillCard
               key={skill.name}
               skill={skill}
-              isCompose={skill.location.includes('.bundle') || skill.location.includes('compose')}
+              isCompose={(skill.location || '').includes('.bundle') || (skill.location || '').includes('compose')}
               onView={onView}
               onDelete={() => {}}
             />

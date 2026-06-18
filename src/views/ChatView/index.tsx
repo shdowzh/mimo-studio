@@ -1,8 +1,9 @@
 // ChatView 入口 — 基于 mimo serve 的实时聊天
 
-import { useEffect } from 'react'
-import { useChatStore } from '@/stores/chatStore'
+import { useEffect, useMemo } from 'react'
+import { useChatStore, selectors } from '@/stores/chatStore'
 import { connectToServer } from '@/lib/api'
+import { isEphemeralSessionId } from '@/stores/chatFlow'
 import { isElectron } from '@/lib/ipc'
 import ConversationList from './ConversationList'
 import ChatHeader from './ChatHeader'
@@ -11,29 +12,26 @@ import MessageInput from './MessageInput'
 import EmptyState from './EmptyState'
 
 export default function ChatView() {
-  const {
-    currentSessionID,
-    serverConnected,
-    serverReady,
-    serveMode,
-    currentProvider,
-    messages,
-    loadSessions,
-    setCurrentSession,
-    initSSE,
-    lastError,
-    setLastError,
-    initError,
-    retryInit,
-  } = useChatStore()
+  const currentSessionID = useChatStore((s) => s.currentSessionID)
+  const currentProvider = useChatStore((s) => s.currentProvider)
+  // 用 getState() 读 messages 避免 selector 每次返回新 [] 引用导致 React #185
+  const allMessages = useChatStore((s) => s.messages)
+  const messages = useMemo(
+    () => currentSessionID ? allMessages[currentSessionID] || [] : [],
+    [currentSessionID, allMessages],
+  )
+  const loadSessions = useChatStore((s) => s.loadSessions)
+  const setCurrentSession = useChatStore((s) => s.setCurrentSession)
+  const initSSE = useChatStore((s) => s.initSSE)
+  const lastError = useChatStore((s) => s.lastError)
+  const setLastError = useChatStore((s) => s.setLastError)
+  const retryInit = useChatStore((s) => s.retryInit)
 
-  // 模式判断：
-  // serverReady → Agent 模式（初始化完成，所有功能可用）
-  // serverConnected && !serverReady → 正在初始化（auto dream 等跑完）
-  // !serverConnected → 离线模式（纯文本 fallback）
-  const isAgentMode = serverReady
-  const isInitializing = serverConnected && !serverReady
-  const isDirectMode = !serverConnected
+  // 从 serverState 派生模式（用 selector hook，响应式更新）
+  const isAgentMode = useChatStore(selectors.isAgentMode)
+  const isInitializing = useChatStore(selectors.isInitializing)
+  const initError = useChatStore(selectors.initError)
+  const serveMode = useChatStore(selectors.serveMode)
 
   // 初始化：连接 mimo serve + 启动 SSE 监听（异步，不阻塞 UI）
   useEffect(() => {
@@ -66,8 +64,7 @@ export default function ChatView() {
     }
   }, [currentSessionID])
 
-  const showEmpty = !currentSessionID ||
-    (currentSessionID && !messages[currentSessionID]?.length)
+  const showEmpty = !currentSessionID || !messages.length
 
   return (
     <div className="flex h-full">
@@ -113,7 +110,7 @@ export default function ChatView() {
             {isAgentMode ? (
               <span>Agent 模式{serveMode === 'embedded' ? ' (直嵌)' : ''} — 工具调用 · 文件操作 · 权限管理 均可用{currentProvider && currentProvider !== 'mimo' && currentProvider !== 'opencode' ? `（经 MiMo Code → ${currentProvider}）` : ''}</span>
             ) : (
-              <span>离线模式 — MiMo Serve 未连接，纯文本（无 Agent 能力）{currentProvider ? `，直连 ${currentProvider}` : ''}</span>
+              <span>离线模式 — MiMo Serve 未连接，纯文本（无 Agent 能力）{currentProvider ? `，直连 ${currentProvider}` : ''}{currentSessionID && isEphemeralSessionId(currentSessionID) ? ' · 会话不会保存' : ''}</span>
             )}
           </div>
         )}

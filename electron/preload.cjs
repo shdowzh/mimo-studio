@@ -26,6 +26,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     set: (key, value) => ipcRenderer.invoke('settings:set', key, value),
   },
 
+  // === API Key 加密存储（safeStorage）===
+  secret: {
+    getApiKey: (providerId) => ipcRenderer.invoke('secret:getApiKey', providerId),
+    setApiKey: (providerId, plain) => ipcRenderer.invoke('secret:setApiKey', providerId, plain),
+    deleteApiKey: (providerId) => ipcRenderer.invoke('secret:deleteApiKey', providerId),
+    listApiKeyProviders: () => ipcRenderer.invoke('secret:listApiKeyProviders'),
+    isEncryptionAvailable: () => ipcRenderer.invoke('secret:isEncryptionAvailable'),
+  },
+
   // === 终端 ===
   terminal: {
     create: (opts) => ipcRenderer.invoke('terminal:create', opts),
@@ -39,6 +48,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onExit: (sessionId, callback) => {
       const channel = `terminal:exit:${sessionId}`
       const handler = (event, code) => callback(code)
+      ipcRenderer.on(channel, handler)
+      return () => ipcRenderer.removeListener(channel, handler)
+    },
+    onCleanup: (sessionId, callback) => {
+      const channel = `terminal:cleanup:${sessionId}`
+      const handler = () => callback()
       ipcRenderer.on(channel, handler)
       return () => ipcRenderer.removeListener(channel, handler)
     },
@@ -61,5 +76,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openDirectory: () => ipcRenderer.invoke('native:openDirectory'),
     openFile: (filters) => ipcRenderer.invoke('native:openFile', filters),
     showItemInFolder: (path) => ipcRenderer.invoke('native:showItemInFolder', path),
+  },
+
+  // === 自动更新 ===
+  updater: {
+    check: () => ipcRenderer.invoke('updater:check'),
+    install: () => ipcRenderer.invoke('updater:install'),
+    onAvailable: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('updater:available', handler)
+      return () => ipcRenderer.removeListener('updater:available', handler)
+    },
+    onProgress: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('updater:progress', handler)
+      return () => ipcRenderer.removeListener('updater:progress', handler)
+    },
+    onDownloaded: (callback) => {
+      const handler = (event, data) => callback(data)
+      ipcRenderer.on('updater:downloaded', handler)
+      return () => ipcRenderer.removeListener('updater:downloaded', handler)
+    },
   },
 })

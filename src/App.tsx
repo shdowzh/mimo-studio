@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, lazy, Suspense } from 'react'
 import AppLayout from '@/components/Layout/AppLayout'
 import Toast from '@/components/ui/Toast'
 import Onboarding from '@/components/Onboarding'
@@ -8,12 +8,14 @@ import { isElectron, getAPI } from '@/lib/ipc'
 import { mimoClient } from '@/lib/mimoClient'
 import { useChatStore } from '@/stores/chatStore'
 import ChatView from '@/views/ChatView'
-import TerminalView from '@/views/TerminalView'
-import MemoryView from '@/views/MemoryView'
-import SkillsView from '@/views/SkillsView'
-import McpView from '@/views/McpView'
-import SettingsView from '@/views/SettingsView'
 import type { ViewId } from '@/lib/mimoTypes'
+
+// 非默认视图懒加载，减少首屏 JS 解析量
+const TerminalView = lazy(() => import('@/views/TerminalView'))
+const MemoryView = lazy(() => import('@/views/MemoryView'))
+const SkillsView = lazy(() => import('@/views/SkillsView'))
+const McpView = lazy(() => import('@/views/McpView'))
+const SettingsView = lazy(() => import('@/views/SettingsView'))
 
 const viewMap: Record<ViewId, React.ComponentType> = {
   chat: ChatView,
@@ -33,7 +35,18 @@ function App() {
   // 注册 mimoClient 连接状态 → zustand store 的同步
   useEffect(() => {
     const unsub = mimoClient.onConnectionChange((connected) => {
-      useChatStore.setState({ serverConnected: connected })
+      const state = useChatStore.getState()
+      if (connected) {
+        const prev = state.serverState
+        if (prev.status === 'disconnected') {
+          useChatStore.getState().setServerState({ status: 'initializing', port: 0, password: '', mode: 'unknown' })
+          // 直接开始 checkReady 轮询（不依赖 server.connected SSE 事件）
+          const retryInit = useChatStore.getState().retryInit
+          retryInit()
+        }
+      } else {
+        useChatStore.getState().setServerState({ status: 'disconnected' })
+      }
     })
     return () => { unsub() }
   }, [])
@@ -62,7 +75,9 @@ function App() {
   return (
     <>
       <AppLayout>
-        <CurrentView />
+        <Suspense fallback={<div className="flex-1 flex items-center justify-center text-xs text-mc-text-muted">加载中...</div>}>
+          <CurrentView />
+        </Suspense>
       </AppLayout>
       <Toast />
       {showOnboarding && (

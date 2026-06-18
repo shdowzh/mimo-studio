@@ -4,9 +4,40 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MiMo Studio</title>
+    <style>
+      #mimo-loading { position:fixed; inset:0; display:flex; align-items:center; justify-content:center; background:#09090b; color:#a1a1aa; font-family:sans-serif; font-size:14px; z-index:99999; }
+      #mimo-error { display:none; position:fixed; inset:0; background:#1a0000; color:#ff4444; font-family:monospace; font-size:12px; padding:20px; z-index:99999; white-space:pre-wrap; overflow:auto; }
+    </style>
   </head>
   <body>
+    <div id="mimo-loading">MiMo Studio 加载中...</div>
+    <div id="mimo-error"></div>
     <div id="root"></div>
+    <script>
+      // 全局错误捕获 — 在黑屏时至少能看到错误信息
+      window.__MIMO_ERRORS__ = []
+      function showError(msg) {
+        window.__MIMO_ERRORS__.push(msg)
+        var el = document.getElementById('mimo-error')
+        el.style.display = 'block'
+        el.textContent = window.__MIMO_ERRORS__.join('\n')
+        var load = document.getElementById('mimo-loading')
+        if (load) load.style.display = 'none'
+      }
+      window.addEventListener('error', function(e) {
+        showError((e.target.tagName || '') + ' ' + (e.target.src || e.target.href || '') + ' ' + (e.message || 'load failed'))
+      }, true)
+      window.onerror = function(msg, src, line, col, err) {
+        showError('JS Error: ' + msg + '\n  at ' + src + ':' + line + ':' + col)
+      }
+      // 3秒后如果 React 还没渲染（root 还是空的），显示诊断信息
+      setTimeout(function() {
+        var root = document.getElementById('root')
+        if (root && root.children.length === 0) {
+          showError('React 未渲染 — root 元素为空\nUserAgent: ' + navigator.userAgent)
+        }
+      }, 3000)
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

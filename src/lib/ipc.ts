@@ -8,7 +8,7 @@ export interface ElectronAPI {
   mimo: {
     startServer: () => Promise<{ port: number; password: string }>
     stopServer: () => Promise<void>
-    serverStatus: () => Promise<{ running: boolean; port: number; mode: string }>
+    serverStatus: () => Promise<{ running: boolean; port: number; password: string; mode: string }>
     detect: () => Promise<{ installed: boolean; version?: string; path?: string; source?: string }>
     install: () => Promise<void>
     onInstallProgress: (callback: (data: { stdout?: string; stderr?: string }) => void) => () => void
@@ -21,12 +21,22 @@ export interface ElectronAPI {
     set: (key: string, value: string) => Promise<void>
   }
 
+  // === API Key 加密存储（safeStorage）===
+  secret: {
+    getApiKey: (providerId: string) => Promise<string | null>
+    setApiKey: (providerId: string, plain: string) => Promise<void>
+    deleteApiKey: (providerId: string) => Promise<void>
+    listApiKeyProviders: () => Promise<string[]>
+    isEncryptionAvailable: () => Promise<boolean>
+  }
+
   // === 终端 ===
   terminal: {
     create: (opts?: { shell?: string; cwd?: string }) => Promise<string>
     write: (sessionId: string, data: string) => Promise<void>
     onData: (sessionId: string, callback: (data: string) => void) => () => void
     onExit: (sessionId: string, callback: (exitCode: number) => void) => () => void
+    onCleanup: (sessionId: string, callback: () => void) => () => void
     resize: (sessionId: string, cols: number, rows: number) => Promise<void>
     kill: (sessionId: string) => Promise<void>
   }
@@ -46,6 +56,15 @@ export interface ElectronAPI {
     openDirectory: () => Promise<string | null>
     openFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>
     showItemInFolder: (path: string) => Promise<void>
+  }
+
+  // === 自动更新 ===
+  updater: {
+    check: () => Promise<{ available: boolean; version?: string | null; error?: string }>
+    install: () => Promise<void>
+    onAvailable: (callback: (data: { version: string }) => void) => () => void
+    onProgress: (callback: (data: { percent: number; transferred: number; total: number }) => void) => () => void
+    onDownloaded: (callback: (data: { version: string }) => void) => () => void
   }
 }
 

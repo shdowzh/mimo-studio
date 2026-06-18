@@ -30,10 +30,14 @@ export default function TerminalView() {
     async function setup() {
       setErrorMsg(null)
       setPtyReady(false)
-      if (serverConnected) {
-        cleanup = await setupPty()
-      } else {
-        cleanup = await setupLocal()
+      try {
+        if (serverConnected) {
+          cleanup = await setupPty()
+        } else {
+          cleanup = await setupLocal()
+        }
+      } catch (err: any) {
+        setErrorMsg(`终端初始化失败: ${err?.message || err}`)
       }
       if (cancelled) cleanup?.()
     }
@@ -75,7 +79,15 @@ export default function TerminalView() {
 
       term.onData((d: string) => { if (ws.readyState === WebSocket.OPEN) ws.send(d) })
 
-      const onResize = () => { try { fit.fit() } catch {} }
+      const onResize = () => {
+        try {
+          fit.fit()
+          // PTY resize：通过 WebSocket 发送 JSON resize 消息
+          if (ws.readyState === WebSocket.OPEN && term.cols && term.rows) {
+            ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }))
+          }
+        } catch {}
+      }
       window.addEventListener('resize', onResize)
 
       return () => { ws.close(); term.dispose(); window.removeEventListener('resize', onResize) }
@@ -113,13 +125,15 @@ export default function TerminalView() {
 
       const unsub = api.terminal.onData(id, (data: string) => { term.write(data) })
       const unsubExit = api.terminal.onExit(id, () => { term.writeln('\r\n\x1b[33m进程已退出\x1b[0m'); setPtyReady(false) })
+      // 主进程 proc exit 时主动通知清理 data listener，防止泄漏
+      const unsubCleanup = api.terminal.onCleanup(id, () => { unsub(); unsubExit() })
 
       term.onData((d: string) => { api.terminal.write(id, d) })
 
       const onResize = () => { try { fit.fit() } catch {} }
       window.addEventListener('resize', onResize)
 
-      return () => { unsub(); unsubExit(); api.terminal.kill(id); term.dispose(); window.removeEventListener('resize', onResize) }
+      return () => { unsub(); unsubExit(); unsubCleanup(); api.terminal.kill(id); term.dispose(); window.removeEventListener('resize', onResize) }
     } catch (err: any) {
       setErrorMsg(`终端启动失败: ${err.message || err}`)
       return () => {}
@@ -140,7 +154,7 @@ export default function TerminalView() {
           </span>
         )}
       </div>
-      <div ref={terminalRef} className="flex-1" />
+      <div ref={terminalRef} className="flex-1" style={{ minHeight: 0 }} />
     </div>
   )
 }

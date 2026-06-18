@@ -4,6 +4,8 @@
 
 import { mimoClient } from './mimoClient'
 import { isElectron, getAPI } from './ipc'
+import { loadAllApiKeys } from './secret'
+import { log } from './logger'
 
 /**
  * 连接到 mimo serve
@@ -12,7 +14,7 @@ import { isElectron, getAPI } from './ipc'
  */
 export async function connectToServer(): Promise<boolean> {
   if (!isElectron()) {
-    console.log('[API] Not in Electron, skipping server connection')
+    log.info('[API] Not in Electron, skipping server connection')
     return false
   }
 
@@ -22,40 +24,44 @@ export async function connectToServer(): Promise<boolean> {
       // 1. 先尝试获取已运行的 server 状态
       console.log(`[API] Checking server status (attempt ${attempt}/${MAX_RETRIES})...`)
       const status = await getAPI().mimo.serverStatus()
-      // 同步 serveMode 到 store
-      if (status.mode) {
+      // 同步 server 状态到 store（走 action，不直接 setState）
+      if (status.running && status.port > 0) {
         try {
           const { useChatStore } = await import('@/stores/chatStore')
-          useChatStore.setState({ serveMode: status.mode })
+          useChatStore.getState().setServerState({ status: 'initializing', port: status.port, password: status.password || '', mode: status.mode || 'unknown' })
           console.log(`[API] Server mode: ${status.mode}`)
-        } catch {}
+        } catch (e) { log.warn('[API] sync serveMode failed:', e) }
       }
       if (status.running && status.port > 0) {
         console.log(`[API] Server already running on port ${status.port}`)
-        mimoClient.connect(status.port, '', (connected) => {
+        mimoClient.connect(status.port, status.password || '', (connected) => {
           console.log(`[API] MimoClient connection: ${connected}`)
           if (connected) syncKeysToServer()
         })
         await waitForConnection(3000)
         if (mimoClient.isConnected) {
-          console.log('[API] Connected to existing server')
+          log.info('[API] Connected to existing server')
           return true
         }
-        console.log('[API] Existing server not responding, will try to restart')
+        log.info('[API] Existing server not responding, will try to restart')
       }
 
       // 2. 启动 server（异步，不阻塞 UI）
-      console.log('[API] Starting mimo serve...')
+      log.info('[API] Starting mimo serve...')
       getAPI().mimo.startServer().then(async result => {
         console.log(`[API] startServer result: port=${result.port}`)
         try {
           const s = await getAPI().mimo.serverStatus()
           if (s.mode) {
             const { useChatStore } = await import('@/stores/chatStore')
-            useChatStore.setState({ serveMode: s.mode })
+            // 走 action 更新状态
+            const prev = useChatStore.getState().serverState
+            const port = result.port || (prev.status !== 'disconnected' ? prev.port : 0)
+            const password = result.password || (prev.status !== 'disconnected' ? prev.password : '')
+            useChatStore.getState().setServerState({ status: 'initializing', port, password, mode: s.mode })
             console.log(`[API] Server mode after start: ${s.mode}`)
           }
-        } catch {}
+        } catch (e) { log.warn('[API] sync serveMode failed:', e) }
         if (result.port > 0) {
           mimoClient.connect(result.port, result.password, (connected) => {
             console.log(`[API] MimoClient connection: ${connected}`)
@@ -63,7 +69,7 @@ export async function connectToServer(): Promise<boolean> {
           })
         }
       }).catch(err => {
-        console.error('[API] startServer error:', err)
+        log.error('[API] startServer error:', err)
       })
 
       return false
@@ -75,7 +81,7 @@ export async function connectToServer(): Promise<boolean> {
     }
   }
 
-  console.error('[API] connectToServer all retries failed')
+  log.error('[API] connectToServer all retries failed')
   return false
 }
 
@@ -99,9 +105,7 @@ function waitForConnection(timeoutMs: number): Promise<void> {
 async function syncKeysToServer() {
   if (!isElectron()) return
   try {
-    const raw = await getAPI().settings.get('apiKeys')
-    if (!raw) return
-    const keys: Record<string, string> = JSON.parse(raw)
+    const keys = await loadAllApiKeys()
     for (const [providerId, apiKey] of Object.entries(keys)) {
       if (!apiKey || !apiKey.trim()) continue
       try {
@@ -111,7 +115,7 @@ async function syncKeysToServer() {
         console.warn(`[API] Failed to sync key for ${providerId}:`, e)
       }
     }
-  } catch {}
+  } catch (e) { log.warn('[API] syncKeysToServer failed:', e) }
 }
 
 // === 本地设置便捷方法 ===
