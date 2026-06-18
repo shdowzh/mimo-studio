@@ -46,7 +46,7 @@ describe('SSE 解析', () => {
     expect(lines).toHaveLength(1)
     const evt = parseSSEEvent(lines[0])
     expect(evt?.type).toBe('session.created')
-    expect(evt?.properties.info.id).toBe('s1')
+    expect((evt?.properties as any).info.id).toBe('s1')
   })
 
   it('解析多行 data', () => {
@@ -69,7 +69,7 @@ describe('SSE 解析', () => {
     const lines = parseSSELines(raw)
     const evt = parseSSEEvent(lines[0])
     expect(evt?.type).toBe('message.updated')
-    expect(evt?.properties.info.id).toBe('m1')
+    expect((evt?.properties as any).info.id).toBe('m1')
   })
 
   it('忽略非 JSON data', () => {

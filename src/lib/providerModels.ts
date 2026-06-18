@@ -153,7 +153,7 @@ export async function fetchDynamicModels(): Promise<DynamicProvider[]> {
 
   const customResults = configuredCustom.map(async (cp): Promise<DynamicProvider> => {
     const apiKey = apiKeys[cp.id]
-    let models: DynamicModel[] = []
+    let models: DynamicModel[]
     let fetched = false
     let error: string | undefined
 
@@ -182,10 +182,10 @@ export async function fetchModelsForProvider(
   const tpl = PROVIDER_TEMPLATES.find(p => p.id === providerId)
   if (!tpl) return null
 
-  let models: DynamicModel[] = []
   let fetched = false
   let error: string | undefined
 
+  let models: DynamicModel[]
   if (tpl.type === 'openai-compatible') {
     try {
       models = await fetchOpenAICompatibleModels(tpl.endpoint, apiKey)

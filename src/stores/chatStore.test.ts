@@ -49,10 +49,8 @@ describe('chatStore fallback 决策', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     // 重置 store 到初始状态
-    const { serverConnected, serverReady, currentSessionID, currentProvider, currentModel } = useChatStore.getState()
     useChatStore.setState({
-      serverConnected: false,
-      serverReady: false,
+      serverState: { status: 'disconnected' },
       currentSessionID: null,
       currentProvider: 'openai',
       currentModel: 'gpt-4o',
@@ -61,14 +59,12 @@ describe('chatStore fallback 决策', () => {
       permissionRequests: {},
       sessionDiffs: {},
       lastError: null,
-      initError: null,
     })
   })
 
   it('server 未连接时走 directChat fallback', async () => {
     const state = useChatStore.getState()
-    expect(state.serverConnected).toBe(false)
-    expect(state.serverReady).toBe(false)
+    expect(state.serverState.status).toBe('disconnected')
 
     // sendMessage 应该走 fallback 路径
     await useChatStore.getState().sendMessage('test message')
