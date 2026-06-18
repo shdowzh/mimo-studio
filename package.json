@@ -81,6 +81,13 @@
             "x64",
             "arm64"
           ]
+        },
+        {
+          "target": "tar.xz",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
         }
       ],
       "icon": "build/icon.png",

@@ -1,0 +1,101 @@
+# ================================================================
+# Gitee CI (GiteeGo) — Linux 构建 + 发布流水线
+# 触发条件：推送 v* 标签
+#
+# 前置设置：
+#   在 Gitee 项目 → 设置 → CI/CD → 变量 中添加：
+#     GITEE_TOKEN = <你的 Gitee 个人访问令牌，需 projects 权限>
+# ================================================================
+
+image: node:22
+
+stages:
+  - build
+  - release
+
+# ── 构建 Linux 制品（AppImage / deb / tar.xz）─────────────────
+build:
+  stage: build
+  cache:
+    key: $CI_COMMIT_REF_SLUG
+    paths:
+      - node_modules/
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq ruby ruby-dev
+    - gem install fpm --no-doc
+  script:
+    - npm install
+    - npx vite build
+    - npx electron-builder --linux AppImage deb tar.xz --publish never
+  artifacts:
+    paths:
+      - release/*.AppImage
+      - release/*.deb
+      - release/*-linux-*.tar.xz
+      - release/*.yml
+    expire_in: 7d
+  only:
+    - tags
+
+# ── 上传到 Gitee Release ──────────────────────────────────────
+release:
+  stage: release
+  dependencies:
+    - build
+  script:
+    - |
+      # 获取 tag（兼容不同版本的 Gitee CI 变量名）
+      TAG=${CI_COMMIT_TAG:-${GITEE_TAG_NAME}}
+      TAG_NUM=${TAG#v}
+
+      if [ -z "$TAG" ]; then
+        echo "ERROR: No tag found"
+        exit 1
+      fi
+      echo "==> Tag: $TAG  Version: $TAG_NUM"
+      echo "==> Token exists: $([ -n "$GITEE_TOKEN" ] && echo YES || echo NO)"
+
+      API="https://gitee.com/api/v5/repos/shdowzh/mimo-studio"
+
+      # 1. 查找已存在的 Release
+      echo "==> Looking for existing release..."
+      RELEASES=$(curl -s "$API/releases?access_token=$GITEE_TOKEN&per_page=50")
+      RELEASE_ID=$(echo "$RELEASES" | node -e "
+        const d=JSON.parse(require('fs').readFileSync(0,'utf8'));
+        const r=Array.isArray(d)?d.find(r=>r.tag_name===process.argv[1]):null;
+        console.log(r?r.id:'');
+      " "$TAG")
+
+      # 2. 不存在则创建
+      if [ -z "$RELEASE_ID" ]; then
+        echo "==> Creating release for $TAG..."
+        RESP=$(curl -s -X POST "$API/releases" \
+          -H "Content-Type: application/json" \
+          -d "{\"access_token\":\"$GITEE_TOKEN\",\"tag_name\":\"$TAG\",\"name\":\"MiMo Studio $TAG_NUM\",\"body\":\"Linux builds by Gitee CI\",\"prerelease\":false,\"target_commitish\":\"main\"}")
+        RELEASE_ID=$(echo "$RESP" | node -e "console.log(JSON.parse(require('fs').readFileSync(0,'utf8')).id||'')")
+      fi
+
+      if [ -z "$RELEASE_ID" ]; then
+        echo "ERROR: Failed to find or create release"
+        echo "$RESP" | head -3
+        exit 1
+      fi
+      echo "==> Release ID: $RELEASE_ID"
+
+      # 3. 上传所有制品
+      for f in release/*.AppImage release/*.deb release/*-linux-*.tar.xz; do
+        [ -f "$f" ] || continue
+        SIZE=$(stat -c%s "$f")
+        MB=$(( SIZE / 1048576 ))
+        if [ "$SIZE" -gt 104857600 ]; then
+          echo "WARN: $f (${MB}MB) exceeds 100MB limit, trying anyway..."
+        fi
+        echo "UPLOAD: $f (${MB}MB)"
+        curl -s -X POST "$API/releases/$RELEASE_ID/attach_files?access_token=$GITEE_TOKEN" \
+          -F "file=@$f" | node -e "
+          try{const d=JSON.parse(require('fs').readFileSync(0,'utf8'));console.log('  ->',d.name||d.browser_download_url||d.message||'OK')}
+          catch(e){console.log('  -> OK (no json)')}"
+      done
+      echo "==> Done!"
+  only:
+    - tags
