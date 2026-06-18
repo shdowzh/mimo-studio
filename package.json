@@ -23,11 +23,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "electron:dev": "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
-    "electron:build": "vite build && electron-builder",
-    "electron:build:win": "vite build && electron-builder --win",
-    "electron:build:mac": "vite build && electron-builder --mac",
-    "electron:build:linux": "vite build && electron-builder --linux",
-    "electron:build:all": "vite build && electron-builder --win --mac --linux",
+    "electron:build": "vite build && electron-builder --publish never",
+    "electron:build:win": "vite build && electron-builder --win --publish never",
+    "electron:build:mac": "vite build && electron-builder --mac --publish never",
+    "electron:build:linux": "vite build && electron-builder --linux --publish never",
+    "electron:build:all": "vite build && electron-builder --win --mac --linux --publish never",
     "opencode:build": "node scripts/build-opencode.cjs",
     "release": "node scripts/release.cjs"
   },
@@ -36,8 +36,8 @@
     "productName": "MiMo Studio",
     "publish": {
       "provider": "github",
-      "owner": "XiaomiMiMo",
-      "repo": "MiMo-Code"
+      "owner": "shdowzh",
+      "repo": "mimo-studio"
     },
     "directories": {
       "output": "release"

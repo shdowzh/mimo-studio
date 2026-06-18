@@ -22,7 +22,7 @@ jobs:
       - run: npx vite build
       # 不内置 MiMo CLI — 用户首次启动时自动下载（优先码云镜像）
       - name: Build macOS (${{ matrix.arch }})
-        run: npx electron-builder --mac --${{ matrix.arch }}
+        run: npx electron-builder --mac --${{ matrix.arch }} --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: macos-${{ matrix.arch }}
@@ -42,7 +42,7 @@ jobs:
       - run: npx vite build
       # 不内置 MiMo CLI — 用户首次启动时自动下载（优先码云镜像）
       - name: Build Linux
-        run: npx electron-builder --linux AppImage deb tar.xz
+        run: npx electron-builder --linux AppImage deb tar.xz --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
@@ -67,7 +67,7 @@ jobs:
       - run: npx vite build
       # 不内置 MiMo CLI — 用户首次启动时自动下载（优先码云镜像）
       - name: Build Windows
-        run: npx electron-builder --win
+        run: npx electron-builder --win --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: windows-setup
