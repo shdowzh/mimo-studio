@@ -2,10 +2,12 @@
 
 import { useChatStore, selectors } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
-import { PanelLeft, Wifi, WifiOff, ChevronDown, Settings, Key, RefreshCw, Check } from 'lucide-react'
+import { PanelLeft, ChevronDown, Settings, Key, RefreshCw, Check } from 'lucide-react'
 import { useState, useEffect, useRef } from 'react'
 import { mimoClient } from '@/lib/mimoClient'
 import { fetchDynamicModels } from '@/lib/providerModels'
+import StatusDot from '@/components/ui/StatusDot'
+import Spinner from '@/components/ui/Spinner'
 
 interface ModelOption {
   providerId: string
@@ -20,9 +22,11 @@ export default function ChatHeader() {
   const sessions = useChatStore((s) => s.sessions)
   const sessionStatus = useChatStore((s) => currentSessionID ? s.sessionStatus[currentSessionID] : undefined)
   const serverConnected = useChatStore(selectors.serverConnected)
+  const isAgentMode = useChatStore(selectors.isAgentMode)
   const currentProvider = useChatStore((s) => s.currentProvider)
   const currentModel = useChatStore((s) => s.currentModel)
   const setModel = useChatStore((s) => s.setModel)
+  const conversationListOpen = useUIStore((s) => s.conversationListOpen)
   const { toggleConversationList } = useUIStore()
 
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -144,46 +148,53 @@ export default function ChatHeader() {
     : ''
 
   return (
-    <div className="flex items-center justify-between px-3 border-b border-mc-border-subtle drag" style={{ paddingTop: '36px', height: '76px' }}>
-      <div className="flex items-center gap-2 no-drag">
-        {!useUIStore.getState().conversationListOpen && (
+    <div className="shrink-0 flex items-center justify-between px-3 border-b border-mc-border-subtle drag" style={{ paddingTop: '36px', height: '72px' }}>
+      <div className="flex items-center gap-2 no-drag min-w-0">
+        {!conversationListOpen && (
           <button onClick={toggleConversationList} className="p-1.5 text-mc-text-muted hover:text-mc-text hover:bg-mc-hover rounded transition-colors" title="展开对话列表">
             <PanelLeft size={14} strokeWidth={1.5} />
           </button>
         )}
-        <span className="text-xs font-medium text-mc-text-secondary truncate max-w-[200px]">
+        <span className="text-xs font-medium text-mc-text truncate max-w-[280px]">
           {currentSession?.title || 'MiMo Studio'}
         </span>
+        {/* 服务状态 — 用单个 StatusDot 表达 Agent 是否就绪 */}
+        <span
+          className="flex items-center gap-1 text-2xs text-mc-text-muted"
+          title={isAgentMode ? 'Agent 模式：工具调用 / 文件操作 / 权限管理 均可用' : serverConnected ? 'MiMo Serve 已连接，正在就绪' : '离线模式：无 Agent 能力'}
+        >
+          <StatusDot
+            tone={isAgentMode ? 'success' : serverConnected ? 'brand' : 'warning'}
+            pulse={!isAgentMode && serverConnected}
+          />
+          {isAgentMode ? 'Agent' : serverConnected ? '准备中' : '离线'}
+        </span>
         {isBusy && (
-          <span className="flex items-center gap-1 text-[10px] text-mc-accent">
-            <span className="w-1 h-1 rounded-full bg-mc-accent animate-pulse" />Agent
+          <span className="flex items-center gap-1 text-2xs text-mc-brand">
+            <StatusDot tone="brand" pulse />
+            执行中
           </span>
         )}
       </div>
 
       <div className="flex items-center gap-2 no-drag">
-        <div className="text-[10px]">
-          {serverConnected ? <Wifi size={10} className="text-mc-success" /> : <WifiOff size={10} className="text-mc-error" />}
-        </div>
-
         {/* Model Picker */}
         <div className="relative" ref={pickerRef}>
           <button
             onClick={() => setPickerOpen(!pickerOpen)}
-            className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md hover:bg-mc-hover transition-colors"
+            className="flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md hover:bg-mc-hover border border-mc-border-subtle bg-mc-surface/60 transition-colors"
             title={`当前: ${displayDetail || '未选择'}`}
           >
-            <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${serverConnected ? 'bg-mc-success' : configuredModels.length > 0 ? 'bg-mc-accent' : 'bg-mc-error'}`} />
-            <span className="max-w-[120px] truncate text-mc-text">{displayName}</span>
-            {displayDetail && <span className="text-[9px] text-mc-text-muted truncate max-w-[100px] hidden sm:inline">{displayDetail}</span>}
-            <ChevronDown size={10} className={`transition-transform text-mc-text-muted ${pickerOpen ? 'rotate-180' : ''}`} />
+            <StatusDot tone={serverConnected ? 'success' : configuredModels.length > 0 ? 'brand' : 'error'} />
+            <span className="max-w-[140px] truncate text-mc-text">{displayName}</span>
+            <ChevronDown size={11} className={`transition-transform text-mc-text-muted ${pickerOpen ? 'rotate-180' : ''}`} />
           </button>
 
           {pickerOpen && (
             <div className="absolute right-0 mt-1 w-72 bg-mc-surface border border-mc-border rounded-lg shadow-xl z-50 py-1 animate-fade-in max-h-[420px] overflow-y-auto">
               {allOptions.map((group, gi) => (
                 <div key={gi}>
-                  <div className="px-3 py-1.5 text-[10px] font-semibold text-mc-text-muted uppercase tracking-wider border-b border-mc-border-subtle/50">
+                  <div className="px-3 py-1.5 text-2xs font-semibold text-mc-text-muted uppercase tracking-wider border-b border-mc-border-subtle/50">
                     {group.label}
                     {serverConnected && group.items === mimoModels && group.items.length > 0 && group.items[0]?.providerId === 'mimo' && <span className="ml-1 text-mc-success normal-case font-normal">✓</span>}
                   </div>
@@ -193,12 +204,12 @@ export default function ChatHeader() {
                       onClick={() => handleSelect(opt)}
                       className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors ${
                         isActive(opt)
-                          ? 'bg-mc-accent/15 text-mc-text font-medium'
+                          ? 'bg-mc-brand-soft text-mc-text font-medium'
                           : 'text-mc-text-secondary hover:bg-mc-hover hover:text-mc-text'
                       }`}
                     >
                       <span className="w-4 shrink-0 flex justify-center">
-                        {isActive(opt) ? <Check size={12} className="text-mc-accent" /> : null}
+                        {isActive(opt) ? <Check size={12} className="text-mc-brand" /> : null}
                       </span>
                       <span className="flex-1 text-left truncate">{opt.label}</span>
                       {opt.source === 'dynamic' && <RefreshCw size={9} className="text-mc-success shrink-0" />}
@@ -209,17 +220,17 @@ export default function ChatHeader() {
               ))}
 
               {allOptions.length === 0 && (
-                <div className="px-3 py-4 text-center text-[11px] text-mc-text-muted">
+                <div className="px-3 py-4 text-center text-2xs text-mc-text-muted">
                   {modelsLoading ? (
                     <p className="flex items-center justify-center gap-2">
-                      <RefreshCw size={10} className="animate-spin" />加载模型列表...
+                      <Spinner size={10} tone="muted" />加载模型列表...
                     </p>
                   ) : (
                     <>
                       <p>暂无可用模型</p>
                       <button
                         onClick={() => { setPickerOpen(false); useUIStore.getState().setCurrentView('settings'); useUIStore.getState().setSettingsTab('providers') }}
-                        className="mt-1 text-mc-accent hover:underline"
+                        className="mt-1 text-mc-brand hover:underline"
                       >
                         去设置配置 API Key →
                       </button>
@@ -228,7 +239,7 @@ export default function ChatHeader() {
                 </div>
               )}
 
-              <div className="border-t border-mc-border mt-1 pt-1">
+              <div className="border-t border-mc-border-subtle mt-1 pt-1">
                 <button
                   onClick={() => { setPickerOpen(false); useUIStore.getState().setCurrentView('settings'); useUIStore.getState().setSettingsTab('providers') }}
                   className="w-full flex items-center gap-2 px-3 py-2 text-xs text-mc-text-muted hover:text-mc-text hover:bg-mc-hover transition-colors"

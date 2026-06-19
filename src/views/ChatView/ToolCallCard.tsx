@@ -1,9 +1,14 @@
 // 工具调用可视化卡片
 // 显示 agent 的工具调用过程：pending → running → completed / error
+//
+// Phase 3 T3.4：折叠态单行设计
+// 单行：图标 工具名 · 摘要 · 状态徽标 · 耗时
 
 import { useState } from 'react'
 import type { ToolPart, ToolState } from '@/lib/mimoTypes'
-import { ChevronDown, ChevronRight, Wrench, FileText, Terminal, FolderOpen, Loader2, CheckCircle2, XCircle } from 'lucide-react'
+import { ChevronRight, Wrench, FileText, Terminal, FolderOpen, CheckCircle2, XCircle } from 'lucide-react'
+import Spinner from '@/components/ui/Spinner'
+import StatusDot from '@/components/ui/StatusDot'
 
 interface ToolCallCardProps {
   part: ToolPart
@@ -43,42 +48,52 @@ export default function ToolCallCard({ part }: ToolCallCardProps) {
   const state = part.state
   const summary = getInputSummary(state)
 
+  // 计算耗时
+  const duration = (state.status === 'completed' || state.status === 'error') && (state as any).time
+    ? Math.round(((state as any).time.end - (state as any).time.start) / 1000)
+    : null
+
   return (
-    <div className="my-1.5 rounded-lg border border-mc-border-subtle bg-mc-surface/50 overflow-hidden">
-      {/* Header — 始终显示 */}
+    <div className="rounded-md border border-mc-border-subtle bg-mc-surface/40 overflow-hidden">
+      {/* 单行 header */}
       <button
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-mc-hover transition-colors"
+        className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-mc-hover transition-colors text-left"
         onClick={() => setExpanded(!expanded)}
       >
-        {/* 状态图标 */}
-        {state.status === 'pending' && <Loader2 size={13} className="text-mc-text-muted animate-pulse" />}
-        {state.status === 'running' && <Loader2 size={13} className="text-mc-accent animate-spin" />}
-        {state.status === 'completed' && <CheckCircle2 size={13} className="text-mc-success" />}
-        {state.status === 'error' && <XCircle size={13} className="text-mc-error" />}
+        {/* Tool 图标 */}
+        <Icon size={12} className="text-mc-text-muted shrink-0" />
 
-        {/* 工具图标 */}
-        <Icon size={13} className="text-mc-text-muted" />
-
-        {/* 工具名 */}
-        <span className="text-xs font-medium text-mc-text">{formatToolName(part.tool)}</span>
+        {/* Tool 名 */}
+        <span className="text-xs font-medium text-mc-text shrink-0">{formatToolName(part.tool)}</span>
 
         {/* 摘要 */}
         {summary && (
-          <span className="text-[11px] text-mc-text-muted truncate flex-1">{summary}</span>
+          <span className="text-2xs text-mc-text-muted truncate flex-1 font-mono">{summary}</span>
         )}
 
-        {/* 展开/折叠 */}
-        {expanded ? <ChevronDown size={12} className="text-mc-text-muted" /> : <ChevronRight size={12} className="text-mc-text-muted" />}
+        {/* 状态徽标 */}
+        {state.status === 'pending' && <StatusDot tone="muted" pulse />}
+        {state.status === 'running' && <Spinner size={10} />}
+        {state.status === 'completed' && <CheckCircle2 size={11} className="text-mc-success shrink-0" />}
+        {state.status === 'error' && <XCircle size={11} className="text-mc-error shrink-0" />}
+
+        {/* 耗时 */}
+        {duration !== null && (
+          <span className="text-2xs text-mc-text-muted shrink-0 font-mono">{duration}s</span>
+        )}
+
+        {/* 展开图标 */}
+        <ChevronRight size={11} className={`text-mc-text-muted shrink-0 transition-transform ${expanded ? 'rotate-90' : ''}`} />
       </button>
 
-      {/* 详情 — 展开时显示 */}
+      {/* 详情面板 */}
       {expanded && (
         <div className="border-t border-mc-border-subtle px-3 py-2">
           {/* 输入参数 */}
           {state.status !== 'pending' && (state as any).input && (
             <div className="mb-2">
-              <div className="text-[10px] text-mc-text-muted mb-1">输入</div>
-              <pre className="text-[11px] text-mc-text bg-mc-bg rounded p-2 overflow-x-auto max-h-[200px] overflow-y-auto font-mono leading-relaxed">
+              <div className="text-2xs text-mc-text-muted mb-1">输入</div>
+              <pre className="text-2xs text-mc-text bg-mc-bg rounded p-2 overflow-x-auto max-h-[200px] overflow-y-auto font-mono leading-relaxed">
                 {typeof (state as any).input === 'string'
                   ? (state as any).input
                   : JSON.stringify((state as any).input, null, 2)}
@@ -89,8 +104,8 @@ export default function ToolCallCard({ part }: ToolCallCardProps) {
           {/* 输出 — completed */}
           {state.status === 'completed' && state.output && (
             <div>
-              <div className="text-[10px] text-mc-text-muted mb-1">输出</div>
-              <pre className="text-[11px] text-mc-text bg-mc-bg rounded p-2 overflow-x-auto max-h-[300px] overflow-y-auto font-mono leading-relaxed whitespace-pre-wrap">
+              <div className="text-2xs text-mc-text-muted mb-1">输出</div>
+              <pre className="text-2xs text-mc-text bg-mc-bg rounded p-2 overflow-x-auto max-h-[300px] overflow-y-auto font-mono leading-relaxed whitespace-pre-wrap">
                 {state.output.length > 2000
                   ? state.output.slice(0, 2000) + '\n... (截断)'
                   : state.output}
@@ -101,17 +116,17 @@ export default function ToolCallCard({ part }: ToolCallCardProps) {
           {/* 错误 — error */}
           {state.status === 'error' && (
             <div>
-              <div className="text-[10px] text-mc-error mb-1">错误</div>
-              <pre className="text-[11px] text-mc-error bg-mc-bg rounded p-2 overflow-x-auto font-mono leading-relaxed">
+              <div className="text-2xs text-mc-error mb-1">错误</div>
+              <pre className="text-2xs text-mc-error bg-mc-bg rounded p-2 overflow-x-auto font-mono leading-relaxed">
                 {state.error}
               </pre>
             </div>
           )}
 
           {/* 耗时 */}
-          {(state.status === 'completed' || state.status === 'error') && (state as any).time && (
-            <div className="mt-1.5 text-[10px] text-mc-text-muted">
-              耗时 {Math.round(((state as any).time.end - (state as any).time.start) / 1000)}s
+          {duration !== null && (
+            <div className="mt-1.5 text-2xs text-mc-text-muted">
+              耗时 {duration}s
             </div>
           )}
         </div>

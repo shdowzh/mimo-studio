@@ -14,7 +14,9 @@ interface UIState {
 
   // Sidebar
   sidebarCollapsed: boolean
+  sidebarPinned: boolean
   toggleSidebar: () => void
+  setSidebarPinned: (pinned: boolean) => void
 
   // Chat sub-panel
   conversationListOpen: boolean
@@ -39,8 +41,10 @@ export const useUIStore = create<UIState>()((set) => ({
   settingsTab: 'appearance',
   setSettingsTab: (tab) => set({ settingsTab: tab }),
 
-  sidebarCollapsed: false,
+  sidebarCollapsed: true,
+  sidebarPinned: false,
   toggleSidebar: () => set((s) => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+  setSidebarPinned: (pinned) => set({ sidebarPinned: pinned }),
 
   conversationListOpen: true,
   toggleConversationList: () => set((s) => ({ conversationListOpen: !s.conversationListOpen })),

@@ -18,6 +18,9 @@
     --text-accent: #94a3b8;
     --accent: #94a3b8;
     --accent-hover: #cbd5e1;
+    --brand: #818cf8;
+    --brand-hover: #a5b4fc;
+    --brand-soft: rgba(129, 140, 248, 0.12);
     --success: #10b981;
     --error: #f87171;
     --warning: #f59e0b;
@@ -42,6 +45,9 @@
     --text-accent: #475569;
     --accent: #64748b;
     --accent-hover: #475569;
+    --brand: #6366f1;
+    --brand-hover: #4f46e5;
+    --brand-soft: rgba(99, 102, 241, 0.08);
     --success: #059669;
     --error: #dc2626;
     --warning: #d97706;
@@ -66,6 +72,9 @@
     --text-accent: #88c0d0;
     --accent: #88c0d0;
     --accent-hover: #8fbcbb;
+    --brand: #88c0d0;
+    --brand-hover: #8fbcbb;
+    --brand-soft: rgba(136, 192, 208, 0.15);
     --success: #a3be8c;
     --error: #bf616a;
     --warning: #ebcb8b;
@@ -90,6 +99,9 @@
     --text-accent: #cba6f7;
     --accent: #cba6f7;
     --accent-hover: #b4befe;
+    --brand: #cba6f7;
+    --brand-hover: #b4befe;
+    --brand-soft: rgba(203, 166, 247, 0.14);
     --success: #a6e3a1;
     --error: #f38ba8;
     --warning: #f9e2af;
@@ -114,6 +126,9 @@
     --text-accent: #61afef;
     --accent: #61afef;
     --accent-hover: #528bff;
+    --brand: #61afef;
+    --brand-hover: #528bff;
+    --brand-soft: rgba(97, 175, 239, 0.14);
     --success: #98c379;
     --error: #e06c75;
     --warning: #e5c07b;
@@ -202,6 +217,44 @@
     background: var(--bg-surface);
     border: 1px solid var(--border-default);
     border-radius: 8px;
+    transition: border-color 200ms ease, box-shadow 200ms ease;
+  }
+  .mc-card:hover {
+    border-color: var(--border-focus);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  }
+
+  /* Page enter animation */
+  .animate-page-enter {
+    animation: pageEnter 0.25s ease-out;
+  }
+  @keyframes pageEnter {
+    0% { opacity: 0; transform: translateY(6px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Stagger children — 用在列表容器上，子元素依次淡入 */
+  .stagger-children > * {
+    animation: fadeSlideIn 0.2s ease-out both;
+  }
+  .stagger-children > *:nth-child(1) { animation-delay: 0ms; }
+  .stagger-children > *:nth-child(2) { animation-delay: 30ms; }
+  .stagger-children > *:nth-child(3) { animation-delay: 60ms; }
+  .stagger-children > *:nth-child(4) { animation-delay: 90ms; }
+  .stagger-children > *:nth-child(5) { animation-delay: 120ms; }
+  .stagger-children > *:nth-child(n+6) { animation-delay: 150ms; }
+  @keyframes fadeSlideIn {
+    0% { opacity: 0; transform: translateY(4px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  /* Modal scale-in */
+  .animate-modal-in {
+    animation: modalIn 0.2s ease-out;
+  }
+  @keyframes modalIn {
+    0% { opacity: 0; transform: scale(0.95) translateY(8px); }
+    100% { opacity: 1; transform: scale(1) translateY(0); }
   }
 
   /* Markdown content styling */

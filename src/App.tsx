@@ -7,8 +7,9 @@ import { useThemeStore } from '@/stores/themeStore'
 import { isElectron, getAPI } from '@/lib/ipc'
 import { mimoClient } from '@/lib/mimoClient'
 import { useChatStore } from '@/stores/chatStore'
+import { connectToServer } from '@/lib/api'
 import ChatView from '@/views/ChatView'
-import type { ViewId } from '@/lib/mimoTypes'
+import type { ViewId } from '@/lib/types'
 
 // 非默认视图懒加载，减少首屏 JS 解析量
 const TerminalView = lazy(() => import('@/views/TerminalView'))
@@ -25,6 +26,9 @@ const viewMap: Record<ViewId, React.ComponentType> = {
   mcp: McpView,
   settings: SettingsView,
 }
+
+// 全局初始化标记，确保 SSE + 连接只初始化一次
+let _appInitialized = false
 
 function App() {
   const { currentView } = useUIStore()
@@ -55,6 +59,32 @@ function App() {
   useEffect(() => {
     loadTheme()
   }, [loadTheme])
+
+  // 加载保存的侧边栏锁定状态
+  useEffect(() => {
+    if (!isElectron()) return
+    getAPI().settings.get('sidebar-pinned').then((v) => {
+      if (v === 'true') {
+        useUIStore.getState().setSidebarPinned(true)
+      }
+    })
+  }, [])
+
+  // 全局初始化：SSE + 连接 mimo serve（只执行一次，切换视图不会重复）
+  useEffect(() => {
+    if (_appInitialized || !isElectron()) return
+    _appInitialized = true
+
+    const initSSE = useChatStore.getState().initSSE
+    const loadSessions = useChatStore.getState().loadSessions
+    const unsubSSE = initSSE()
+
+    connectToServer().then(connected => {
+      if (connected) loadSessions()
+    })
+
+    return () => { unsubSSE?.() }
+  }, [])
 
   // 检查是否首次启动
   useEffect(() => {

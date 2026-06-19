@@ -5,6 +5,7 @@ import { create } from 'zustand'
 import { mimoClient } from '@/lib/mimoClient'
 import { isElectron, getAPI } from '@/lib/ipc'
 import { sendMessageFlow } from './chatFlow'
+import { pushRecentPrompt } from '@/lib/recentPrompts'
 import { SSE_HANDLER_MAP, applyMergedDelta } from './sseHandlers'
 import type {
   SessionInfo,
@@ -16,6 +17,7 @@ import type {
 
 // === 本地 Session 追踪 ===
 const MY_SESSIONS_KEY = 'mySessionIds'
+const PINNED_SESSIONS_KEY = 'pinned-sessions'
 
 let currentAbortController: AbortController | null = null
 
@@ -37,6 +39,27 @@ async function untrackSession(sessionID: string) {
   const ids = await getMySessionIds()
   ids.delete(sessionID)
   await getAPI().settings.set(MY_SESSIONS_KEY, JSON.stringify([...ids]))
+}
+
+async function getPinnedSessionIds(): Promise<string[]> {
+  if (!isElectron()) return []
+  const raw = await getAPI().settings.get(PINNED_SESSIONS_KEY)
+  return raw ? JSON.parse(raw) : []
+}
+
+async function setPinnedSessionIds(ids: string[]) {
+  if (!isElectron()) return
+  await getAPI().settings.set(PINNED_SESSIONS_KEY, JSON.stringify(ids))
+}
+
+function sortSessions(sessions: SessionInfo[], pinnedIds: string[]) {
+  const pinned = new Set(pinnedIds)
+  return [...sessions].sort((a, b) => {
+    const ap = pinned.has(a.id) ? 1 : 0
+    const bp = pinned.has(b.id) ? 1 : 0
+    if (ap !== bp) return bp - ap
+    return b.time.updated - a.time.updated
+  })
 }
 
 // === 状态接口 ===
@@ -74,6 +97,7 @@ export interface ChatState {
   // === Session 列表 ===
   sessions: SessionInfo[]
   setSessions: (sessions: SessionInfo[]) => void
+  pinnedSessionIds: string[]
 
   // === 消息（按 sessionID 索引）===
   messages: Record<string, MessageWithParts[]>
@@ -107,6 +131,9 @@ export interface ChatState {
   replyPermission: (sessionID: string, permissionID: string, reply: 'once' | 'always' | 'reject') => Promise<void>
   deleteSession: (sessionID: string) => Promise<void>
   createSession: (title?: string) => Promise<SessionInfo | null>
+  renameSession: (sessionID: string, title: string) => Promise<void>
+  loadPinnedSessions: () => Promise<void>
+  togglePinSession: (sessionID: string) => Promise<void>
 
   // === SSE ===
   initSSE: () => () => void
@@ -125,6 +152,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   // === Session 列表 ===
   sessions: [],
   setSessions: (sessions) => set({ sessions }),
+  pinnedSessionIds: [],
 
   // === 消息 ===
   messages: {},
@@ -157,10 +185,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   loadSessions: async () => {
     try {
       const myIds = await getMySessionIds()
+      const pinnedIds = await getPinnedSessionIds()
       const allSessions = await mimoClient.listSessions()
       const sessions = allSessions.filter(s => myIds.has(s.id))
-      sessions.sort((a, b) => b.time.updated - a.time.updated)
-      set({ sessions })
+      set({ sessions: sortSessions(sessions, pinnedIds), pinnedSessionIds: pinnedIds })
     } catch (err) {
       console.error('loadSessions error:', err)
     }
@@ -180,6 +208,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   sendMessage: async (text: string) => {
     const abortController = new AbortController()
     currentAbortController = abortController
+    // T3.7：记录最近 prompt
+    pushRecentPrompt(text).catch(() => {})
     try {
       await sendMessageFlow(text, abortController, {
         get,
@@ -231,6 +261,8 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   deleteSession: async (sessionID: string) => {
     try {
       await untrackSession(sessionID)
+      const nextPinned = get().pinnedSessionIds.filter(id => id !== sessionID)
+      await setPinnedSessionIds(nextPinned)
       await mimoClient.deleteSession(sessionID)
       set((state) => {
         const newSessions = state.sessions.filter(s => s.id !== sessionID)
@@ -245,6 +277,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
           messages: newMessages,
           sessionStatus: newStatus,
           permissionRequests: newPerms,
+          pinnedSessionIds: nextPinned,
           currentSessionID: state.currentSessionID === sessionID ? null : state.currentSessionID,
         }
       })
@@ -258,7 +291,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       const session = await mimoClient.createSession({ title })
       await trackSession(session.id)
       set((state) => ({
-        sessions: [session, ...state.sessions],
+        sessions: sortSessions([session, ...state.sessions], state.pinnedSessionIds),
         currentSessionID: session.id,
       }))
       return session
@@ -266,6 +299,40 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       console.error('createSession error:', err)
       return null
     }
+  },
+
+  renameSession: async (sessionID: string, title: string) => {
+    try {
+      const updated = await mimoClient.updateSession(sessionID, { title })
+      set((state) => ({
+        sessions: sortSessions(
+          state.sessions.map(s => s.id === sessionID ? { ...s, ...updated, title } : s),
+          state.pinnedSessionIds,
+        ),
+      }))
+    } catch (err) {
+      console.error('renameSession error:', err)
+    }
+  },
+
+  loadPinnedSessions: async () => {
+    const pinnedIds = await getPinnedSessionIds()
+    set((state) => ({
+      pinnedSessionIds: pinnedIds,
+      sessions: sortSessions(state.sessions, pinnedIds),
+    }))
+  },
+
+  togglePinSession: async (sessionID: string) => {
+    const current = get().pinnedSessionIds
+    const next = current.includes(sessionID)
+      ? current.filter(id => id !== sessionID)
+      : [...current, sessionID]
+    await setPinnedSessionIds(next)
+    set((state) => ({
+      pinnedSessionIds: next,
+      sessions: sortSessions(state.sessions, next),
+    }))
   },
 
   // ============================================================

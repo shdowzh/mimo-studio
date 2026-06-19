@@ -1,9 +1,15 @@
+// MCP 服务器视图 — Phase 4 T4.4
+// StatusDot 状态指示 + EmptyHint 空态
+
 import { useState, useEffect } from 'react'
 import { isElectron, getAPI } from '@/lib/ipc'
-import { Plug, Plus, Circle, Trash2 } from 'lucide-react'
+import { Plug, Plus, Trash2 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
+import TitleBar from '@/components/ui/TitleBar'
+import StatusDot from '@/components/ui/StatusDot'
+import EmptyHint from '@/components/ui/EmptyHint'
 import type { McpServer } from '@/lib/types'
 
 export default function McpView() {
@@ -17,9 +23,7 @@ export default function McpView() {
   const [formCommand, setFormCommand] = useState('')
   const [formUrl, setFormUrl] = useState('')
 
-  useEffect(() => {
-    loadServers()
-  }, [])
+  useEffect(() => { loadServers() }, [])
 
   const loadServers = async () => {
     if (!isElectron()) { setLoading(false); return }
@@ -67,30 +71,30 @@ export default function McpView() {
     loadServers()
   }
 
-  const statusColors: Record<string, string> = {
-    running: 'bg-mc-success',
-    stopped: 'bg-mc-text-muted',
-    error: 'bg-mc-error',
+  const statusTone = (status: string) => {
+    if (status === 'running') return 'success' as const
+    if (status === 'error') return 'error' as const
+    return 'muted' as const
   }
 
   return (
     <div className="flex flex-col h-full">
-      <div className="h-[36px] drag" />
-      {/* Header */}
-      <div className="flex items-center justify-between h-10 px-4 border-b border-mc-border-subtle">
-        <div className="flex items-center gap-2">
-          <Plug size={14} strokeWidth={1.5} className="text-mc-text-muted" />
-          <span className="text-xs font-medium text-mc-text-secondary">MCP 服务器</span>
-          <span className="text-[9px] text-mc-text-muted bg-mc-elevated px-1.5 py-0.5 rounded">仅本地配置</span>
-        </div>
-        <Button variant="ghost" size="sm" icon={<Plus size={12} />} onClick={() => setAddModalOpen(true)}>
-          添加
-        </Button>
-      </div>
+      <TitleBar
+        icon={Plug}
+        title="MCP 服务器"
+        actions={
+          <div className="flex items-center gap-2">
+            <span className="text-2xs text-mc-text-muted bg-mc-elevated px-1.5 py-0.5 rounded">仅本地配置</span>
+            <Button variant="ghost" size="sm" icon={<Plus size={12} />} onClick={() => setAddModalOpen(true)}>
+              添加
+            </Button>
+          </div>
+        }
+      />
 
       {/* 仅本地提示 */}
-      <div className="px-4 py-2 border-b border-mc-border-subtle/50 bg-amber-500/5">
-        <p className="text-[10px] text-amber-600">此处配置仅保存在本地，MCP 服务器需由 MiMo Serve 启动和管理。连接 MiMo Serve 后，Agent 将自动加载已启用的 MCP 服务器。</p>
+      <div className="px-4 py-2 border-b border-mc-border-subtle/50 bg-mc-warning/5">
+        <p className="text-2xs text-mc-warning">此处配置仅保存在本地，MCP 服务器需由 MiMo Serve 启动和管理。</p>
       </div>
 
       {/* Server list */}
@@ -100,27 +104,37 @@ export default function McpView() {
             <p className="text-xs text-mc-text-muted">加载中...</p>
           </div>
         ) : servers.length === 0 ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center space-y-2">
-              <Plug size={24} strokeWidth={1} className="text-mc-text-muted mx-auto" />
-              <p className="text-xs text-mc-text-muted">暂无 MCP 服务器</p>
-              <p className="text-[10px] text-mc-text-muted">添加 MCP 服务器以扩展 Agent 能力</p>
-            </div>
-          </div>
+          <EmptyHint
+            icon={Plug}
+            title="暂无 MCP 服务器"
+            description="添加 MCP 服务器以扩展 Agent 能力"
+            action={
+              <Button variant="brand" size="sm" icon={<Plus size={12} />} onClick={() => setAddModalOpen(true)}>
+                添加服务器
+              </Button>
+            }
+          />
         ) : (
           <div className="space-y-2">
             {servers.map((server) => (
               <div key={server.id} className="mc-card p-3 flex items-center gap-3">
-                <Circle size={8} className={`flex-shrink-0 ${statusColors[server.status] || 'bg-mc-text-muted'}`} fill="currentColor" />
+                <StatusDot tone={statusTone(server.status)} />
                 <div className="flex-1 min-w-0">
-                  <h4 className="text-xs font-medium text-mc-text">{server.name}</h4>
-                  <p className="text-[10px] text-mc-text-muted truncate">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-xs font-medium text-mc-text">{server.name}</h4>
+                    <span className="text-2xs text-mc-text-muted bg-mc-elevated px-1.5 py-0.5 rounded">{server.type}</span>
+                  </div>
+                  <p className="text-2xs text-mc-text-muted truncate font-mono">
                     {server.type === 'stdio' ? server.command : server.url}
                   </p>
                 </div>
                 <button
                   onClick={() => handleToggle(server)}
-                  className={`text-[10px] px-2 py-0.5 rounded ${server.enabled ? 'text-mc-success bg-mc-success/10' : 'text-mc-text-muted bg-mc-elevated'}`}
+                  className={`text-2xs px-2 py-0.5 rounded transition-colors ${
+                    server.enabled
+                      ? 'text-mc-success bg-mc-success/10 hover:bg-mc-success/20'
+                      : 'text-mc-text-muted bg-mc-elevated hover:bg-mc-hover'
+                  }`}
                 >
                   {server.enabled ? '启用' : '禁用'}
                 </button>
@@ -137,11 +151,7 @@ export default function McpView() {
       </div>
 
       {/* Add server modal */}
-      <Modal
-        open={addModalOpen}
-        onClose={() => setAddModalOpen(false)}
-        title="添加 MCP 服务器"
-      >
+      <Modal open={addModalOpen} onClose={() => setAddModalOpen(false)} title="添加 MCP 服务器">
         <div className="space-y-4">
           <Input label="名称" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="my-server" />
           <div className="space-y-1">
@@ -149,13 +159,13 @@ export default function McpView() {
             <div className="flex gap-2">
               <button
                 onClick={() => setFormType('stdio')}
-                className={`px-3 py-1.5 text-xs rounded-md ${formType === 'stdio' ? 'bg-mc-elevated text-mc-text' : 'text-mc-text-muted hover:bg-mc-hover'}`}
+                className={`px-3 py-1.5 text-xs rounded-md ${formType === 'stdio' ? 'bg-mc-brand-soft text-mc-brand' : 'text-mc-text-muted hover:bg-mc-hover'}`}
               >
                 stdio
               </button>
               <button
                 onClick={() => setFormType('http')}
-                className={`px-3 py-1.5 text-xs rounded-md ${formType === 'http' ? 'bg-mc-elevated text-mc-text' : 'text-mc-text-muted hover:bg-mc-hover'}`}
+                className={`px-3 py-1.5 text-xs rounded-md ${formType === 'http' ? 'bg-mc-brand-soft text-mc-brand' : 'text-mc-text-muted hover:bg-mc-hover'}`}
               >
                 HTTP
               </button>
@@ -168,7 +178,7 @@ export default function McpView() {
           )}
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setAddModalOpen(false)}>取消</Button>
-            <Button variant="primary" size="sm" onClick={handleAdd}>添加</Button>
+            <Button variant="brand" size="sm" onClick={handleAdd}>添加</Button>
           </div>
         </div>
       </Modal>

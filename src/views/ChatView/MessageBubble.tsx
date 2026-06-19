@@ -1,41 +1,64 @@
-// 消息气泡 — 基于 Part 多态结构渲染
-// 支持文本、推理、工具调用、步骤标记等 part 类型
+// 消息气泡 — Phase 3 重设计
+// T3.1 左侧头像列 + T3.2 border-left + T3.3 StepBlock 折叠 + T3.5 Reasoning 隐式化
 
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
 import type { MessageWithParts, Part, TextPart, ReasoningPart, ToolPart, StepStartPart, StepFinishPart } from '@/lib/mimoTypes'
-import { Brain, Wrench, ChevronDown, ChevronRight } from 'lucide-react'
+import { Brain, Wrench, User, Bot, ChevronDown, ChevronRight, CheckCircle2, Paperclip, Cog } from 'lucide-react'
 import { useState, useMemo, memo } from 'react'
 import ToolCallCard from './ToolCallCard'
+import Spinner from '@/components/ui/Spinner'
 
 marked.setOptions({ gfm: true, breaks: true })
-
-// === Markdown 渲染 ===
-// 走 marked 默认 renderer 输出 <pre><code class="language-xxx">，
-// DOMPurify 兜底防 XSS；样式由 globals.css 的 .markdown-content pre/code 提供
 
 function parseMarkdown(content: string): string {
   const html = marked.parse(content) as string
   return DOMPurify.sanitize(html)
 }
 
-// === Reasoning Block ===
+// === 头像 ===
 
-function ReasoningBlock({ text }: { text: string }) {
+function Avatar({ role }: { role: 'user' | 'assistant' }) {
+  return (
+    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
+      role === 'user' ? 'bg-mc-elevated' : 'bg-mc-brand-soft'
+    }`}>
+      {role === 'user'
+        ? <User size={14} className="text-mc-text-muted" />
+        : <Bot size={14} className="text-mc-brand" />
+      }
+    </div>
+  )
+}
+
+// === Reasoning Block (T3.5) ===
+
+function ReasoningBlock({ text, isStreaming }: { text: string; isStreaming?: boolean }) {
   const [show, setShow] = useState(false)
 
+  if (isStreaming) {
+    return (
+      <div className="flex items-center gap-1.5 text-2xs text-mc-text-muted italic mb-1.5">
+        <Spinner size={10} tone="muted" />
+        正在思考...
+      </div>
+    )
+  }
+
   return (
-    <div className="mb-2">
+    <div className="mb-1.5 group">
       <button
         onClick={() => setShow(!show)}
-        className="flex items-center gap-1.5 text-[10px] text-mc-text-muted hover:text-mc-accent transition-colors"
+        className="flex items-center gap-1.5 text-2xs text-mc-text-muted italic hover:text-mc-text transition-colors"
       >
         <Brain size={10} />
-        {show ? '隐藏思考' : '查看思考'}
-        {show ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+        思考过程 · {text.length} 字
+        <span className="opacity-0 group-hover:opacity-100 transition-opacity">
+          {show ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
+        </span>
       </button>
       {show && (
-        <div className="mt-1.5 p-2.5 bg-mc-bg rounded-lg border border-mc-border-subtle text-[11px] text-mc-text-muted leading-relaxed font-mono max-h-[200px] overflow-y-auto">
+        <div className="mt-1.5 p-2.5 bg-mc-surface/50 rounded-md border-l-2 border-mc-brand/20 text-2xs text-mc-text-muted leading-relaxed font-mono max-h-[200px] overflow-y-auto whitespace-pre-wrap">
           {text}
         </div>
       )}
@@ -43,31 +66,55 @@ function ReasoningBlock({ text }: { text: string }) {
   )
 }
 
-// === Step Block ===
+// === Step Block (T3.3) ===
 
-function StepBlock({ children, stepIndex }: { children: React.ReactNode; stepIndex: number }) {
-  const [collapsed, setCollapsed] = useState(false)
+function StepBlock({ children, stepIndex, finish, totalSteps, isLastStep }: {
+  children: React.ReactNode
+  stepIndex: number
+  finish?: StepFinishPart
+  totalSteps: number
+  isLastStep: boolean
+}) {
+  const isCompleted = !!finish
+  const [collapsed, setCollapsed] = useState(isCompleted && !isLastStep)
+
+  const summary = useMemo(() => {
+    if (!finish) return null
+    const childrenArray = Array.isArray(children) ? children : [children]
+    const toolCount = childrenArray.filter((c: any) => c?.props?.part?.type === 'tool').length
+    const tokens = finish.tokens?.total
+    const cost = finish.cost
+    return [
+      toolCount > 0 ? `${toolCount} 个工具` : null,
+      tokens ? `${tokens} tokens` : null,
+      cost > 0 ? `$${cost.toFixed(4)}` : cost === 0 ? '免费' : null,
+    ].filter(Boolean).join(' · ')
+  }, [children, finish])
 
   return (
-    <div className="border-l-2 border-mc-border-subtle pl-3 my-2">
+    <div className="my-1.5">
       <button
         onClick={() => setCollapsed(!collapsed)}
-        className="flex items-center gap-1.5 text-[10px] text-mc-text-muted hover:text-mc-text transition-colors mb-1"
+        className="w-full flex items-center gap-1.5 text-2xs text-mc-text-muted hover:text-mc-text transition-colors px-1 py-0.5 rounded hover:bg-mc-hover"
       >
         {collapsed ? <ChevronRight size={10} /> : <ChevronDown size={10} />}
-        <Wrench size={10} />
-        Step {stepIndex + 1}
+        {isCompleted ? <CheckCircle2 size={10} className="text-mc-success" /> : <Spinner size={10} />}
+        <span className="font-medium">Step {stepIndex + 1}/{totalSteps}</span>
+        {summary && collapsed && <span className="opacity-70">· {summary}</span>}
       </button>
-      {!collapsed && <div className="space-y-1">{children}</div>}
+      {!collapsed && (
+        <div className="mt-1 pl-3 border-l border-mc-border-subtle space-y-1">
+          {children}
+          {finish && <MetaInfo part={finish} />}
+        </div>
+      )}
     </div>
   )
 }
 
-// === Token/Meta Info ===
-
 function MetaInfo({ part }: { part: StepFinishPart }) {
   return (
-    <div className="flex items-center gap-3 text-[9px] text-mc-text-muted mt-1 px-1">
+    <div className="flex items-center gap-3 text-2xs text-mc-text-muted mt-1 px-1">
       {part.tokens && (
         <>
           {part.tokens.input > 0 && <span>输入: {part.tokens.input}</span>}
@@ -91,164 +138,99 @@ interface MessageBubbleProps {
 
 export default memo(function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.info.role === 'user'
-
-  // 将 parts 分组：按 step-start/step-finish 划分步骤
   const { steps, preStep, postStep } = groupPartsBySteps(message.parts)
 
   if (isUser) {
-    // 用户消息：只显示 text parts
     const textContent = message.parts
       .filter((p): p is TextPart => p.type === 'text')
       .map(p => p.text)
       .join('\n')
 
     return (
-      <div className="flex mb-4 justify-end animate-fade-in">
-        <div className="max-w-[75%] rounded-xl px-4 py-2.5 bg-mc-elevated text-mc-text">
-          <p className="text-sm whitespace-pre-wrap leading-relaxed">{textContent}</p>
+      <div className="flex gap-3 mb-5 animate-fade-in">
+        <Avatar role="user" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1">
+            <span className="text-xs font-medium text-mc-text">你</span>
+          </div>
+          <div className="rounded-lg bg-mc-elevated px-3 py-2 inline-block max-w-full">
+            <p className="text-sm whitespace-pre-wrap leading-relaxed">{textContent}</p>
+          </div>
         </div>
       </div>
     )
   }
 
-  // 助手消息：渲染所有 part 类型
   return (
-    <div className="flex mb-4 justify-start animate-fade-in">
-      <div className="max-w-[75%] text-mc-text">
-        {/* Pre-step parts (reasoning before first step) */}
-        {preStep.map(part => renderPart(part))}
+    <div className="flex gap-3 mb-5 animate-fade-in">
+      <Avatar role="assistant" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-1">
+          <span className="text-xs font-medium text-mc-text">MiMo</span>
+          {message.info.model && (
+            <span className="text-2xs text-mc-text-muted">
+              {message.info.model.providerID} / {message.info.model.modelID}
+            </span>
+          )}
+        </div>
 
-        {/* Steps */}
-        {steps.map((step, i) => (
-          <StepBlock key={i} stepIndex={i}>
-            {step.parts.map(part => renderPart(part))}
-            {step.finish && <MetaInfo part={step.finish} />}
-          </StepBlock>
-        ))}
+        <div className="border-l-2 border-mc-brand/30 pl-4 space-y-2">
+          {preStep.map(part => renderPart(part, false))}
+          {steps.map((step, i) => (
+            <StepBlock key={i} stepIndex={i} finish={step.finish} totalSteps={steps.length} isLastStep={i === steps.length - 1}>
+              {step.parts.map(part => renderPart(part, false))}
+            </StepBlock>
+          ))}
+          {postStep.map(part => renderPart(part, steps.length === 0))}
 
-        {/* Post-step parts (text after last step) */}
-        {postStep.map(part => renderPart(part))}
-
-        {/* 如果没有任何 parts，显示工作指示 */}
-        {message.parts.length === 0 && (
-          <div className="flex items-center gap-1.5 text-xs text-mc-text-muted">
-            <Wrench size={12} className="animate-pulse" />
-            <span>Agent 工作中...</span>
-          </div>
-        )}
-
-        {/* 模型信息 */}
-        {message.info.model && (
-          <div className="mt-2 text-[9px] text-mc-text-muted">
-            {message.info.model.providerID}/{message.info.model.modelID}
-          </div>
-        )}
+          {message.parts.length === 0 && (
+            <div className="flex items-center gap-1.5 text-xs text-mc-text-muted">
+              <Spinner size={12} tone="muted" />
+              <span>Agent 工作中...</span>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
 })
 
-// === 文本 Part 渲染（带 useMemo 缓存 markdown 解析结果）===
-
 const TextPartView = memo(function TextPartView({ part }: { part: { id: string; text: string } }) {
   const html = useMemo(() => parseMarkdown(part.text), [part.text])
   if (!part.text) return null
   return (
-    <div
-      key={part.id}
-      className="markdown-content text-sm leading-relaxed"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <div className="markdown-content text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: html }} />
   )
 })
 
-// === Part 渲染 ===
-
-function renderPart(part: Part): React.ReactNode {
+function renderPart(part: Part, isStreaming: boolean): React.ReactNode {
   switch (part.type) {
-    case 'text':
-      return <TextPartView key={part.id} part={part} />
-
-    case 'reasoning':
-      if (!part.text) return null
-      return <ReasoningBlock key={part.id} text={part.text} />
-
-    case 'tool':
-      return <ToolCallCard key={part.id} part={part} />
-
-    case 'step-start':
-    case 'step-finish':
-    case 'snapshot':
-    case 'patch':
-      // 这些由 StepBlock 处理，此处不渲染
-      return null
-
-    case 'file':
-      return (
-        <div key={part.id} className="text-[11px] text-mc-text-muted">
-          📎 {part.filename || 'file'}
-        </div>
-      )
-
-    case 'agent':
-      return (
-        <div key={part.id} className="text-[11px] text-mc-text-muted">
-          🤖 {part.name}
-        </div>
-      )
-
-    case 'subtask':
-      return (
-        <div key={part.id} className="text-[11px] text-mc-text-muted">
-          🔧 {part.description}
-        </div>
-      )
-
-    default:
-      return null
+    case 'text': return <TextPartView key={part.id} part={part} />
+    case 'reasoning': return part.text ? <ReasoningBlock key={part.id} text={part.text} isStreaming={isStreaming} /> : null
+    case 'tool': return <ToolCallCard key={part.id} part={part} />
+    case 'step-start': case 'step-finish': case 'snapshot': case 'patch': return null
+    case 'file': return <div key={part.id} className="flex items-center gap-1.5 text-2xs text-mc-text-muted"><Paperclip size={10} />{part.filename || 'file'}</div>
+    case 'agent': return <div key={part.id} className="flex items-center gap-1.5 text-2xs text-mc-text-muted"><Bot size={10} />{part.name}</div>
+    case 'subtask': return <div key={part.id} className="flex items-center gap-1.5 text-2xs text-mc-text-muted"><Cog size={10} />{part.description}</div>
+    default: return null
   }
 }
 
-// === Step 分组逻辑 ===
-
-interface StepGroup {
-  parts: Part[]
-  finish?: StepFinishPart
-}
+interface StepGroup { parts: Part[]; finish?: StepFinishPart }
 
 function groupPartsBySteps(parts: Part[]) {
   const preStep: Part[] = []
   const steps: StepGroup[] = []
   const postStep: Part[] = []
-
   let currentStep: StepGroup | null = null
   let inStep = false
 
   for (const part of parts) {
-    if (part.type === 'step-start') {
-      inStep = true
-      currentStep = { parts: [] }
-      continue
-    }
-
-    if (part.type === 'step-finish') {
-      if (currentStep) {
-        currentStep.finish = part
-        steps.push(currentStep)
-      }
-      currentStep = null
-      inStep = false
-      continue
-    }
-
-    if (inStep && currentStep) {
-      currentStep.parts.push(part)
-    } else if (steps.length === 0) {
-      preStep.push(part)
-    } else {
-      postStep.push(part)
-    }
+    if (part.type === 'step-start') { inStep = true; currentStep = { parts: [] }; continue }
+    if (part.type === 'step-finish') { if (currentStep) { currentStep.finish = part; steps.push(currentStep) }; currentStep = null; inStep = false; continue }
+    if (inStep && currentStep) { currentStep.parts.push(part) }
+    else if (steps.length === 0) preStep.push(part)
+    else postStep.push(part)
   }
-
   return { preStep, steps, postStep }
 }

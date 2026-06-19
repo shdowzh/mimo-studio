@@ -1,9 +1,12 @@
 // 权限确认对话框
 // 当 agent 请求执行敏感操作时，显示此对话框让用户确认
+//
+// Phase 3 T3.8：改用 brand 色描边 + Button 组件
 
 import type { PermissionRequest } from '@/lib/mimoTypes'
 import { useChatStore } from '@/stores/chatStore'
-import { Shield, ShieldCheck, ShieldX } from 'lucide-react'
+import { Shield, ShieldCheck, ShieldX, Terminal, FileText, Eye } from 'lucide-react'
+import Button from '@/components/ui/Button'
 
 export default function PermissionDialog() {
   const permissionRequests = useChatStore((s) => s.permissionRequests)
@@ -22,25 +25,34 @@ export default function PermissionDialog() {
   )
 }
 
+/** 根据权限类型返回图标 */
+function getPermissionIcon(permission: string) {
+  if (permission.includes('bash') || permission.includes('shell') || permission.includes('exec')) return Terminal
+  if (permission.includes('write') || permission.includes('create')) return FileText
+  if (permission.includes('read')) return Eye
+  return Shield
+}
+
 function PermissionCard({ request, onReply }: { request: PermissionRequest; onReply: (reply: 'once' | 'always' | 'reject') => void }) {
   const { permission, patterns, tool } = request
 
   // 从 patterns 提取目标信息
   const target = patterns.length > 0 ? patterns.join(', ') : ''
   const toolName = tool ? `工具: ${tool.callID.slice(0, 8)}...` : ''
+  const PermissionIcon = getPermissionIcon(permission)
 
   return (
-    <div className="bg-mc-surface border border-mc-border rounded-xl shadow-lg overflow-hidden animate-fade-in">
+    <div className="bg-mc-surface border border-mc-brand/40 rounded-xl shadow-2xl shadow-mc-brand/10 overflow-hidden animate-slide-up">
       {/* Header */}
-      <div className="flex items-center gap-2 px-4 py-2.5 bg-mc-elevated/50 border-b border-mc-border-subtle">
-        <Shield size={14} className="text-amber-400" />
+      <div className="flex items-center gap-2 px-4 py-2.5 bg-mc-brand-soft">
+        <PermissionIcon size={14} className="text-mc-brand" />
         <span className="text-xs font-medium text-mc-text">Agent 请求权限</span>
       </div>
 
       {/* Body */}
       <div className="px-4 py-3 space-y-1.5">
         <div className="text-sm text-mc-text">
-          允许执行: <span className="font-mono text-mc-accent">{permission}</span>
+          允许执行: <span className="font-mono text-mc-brand">{permission}</span>
         </div>
         {target && (
           <div className="text-xs text-mc-text-muted">
@@ -48,33 +60,39 @@ function PermissionCard({ request, onReply }: { request: PermissionRequest; onRe
           </div>
         )}
         {toolName && (
-          <div className="text-[11px] text-mc-text-muted">{toolName}</div>
+          <div className="text-2xs text-mc-text-muted">{toolName}</div>
         )}
       </div>
 
       {/* Actions */}
-      <div className="flex border-t border-mc-border-subtle">
-        <button
+      <div className="grid grid-cols-3 border-t border-mc-border-subtle">
+        <Button
+          variant="brand"
+          size="sm"
           onClick={() => onReply('once')}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-mc-text hover:bg-mc-hover transition-colors border-r border-mc-border-subtle"
+          icon={<Shield size={11} />}
+          className="rounded-none border-r border-mc-brand/20"
         >
-          <Shield size={11} />
-          仅本次允许
-        </button>
-        <button
+          仅本次
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={() => onReply('always')}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-mc-success hover:bg-mc-hover transition-colors border-r border-mc-border-subtle"
+          icon={<ShieldCheck size={11} />}
+          className="rounded-none border-r border-mc-border-subtle"
         >
-          <ShieldCheck size={11} />
-          始终允许
-        </button>
-        <button
+          始终
+        </Button>
+        <Button
+          variant="danger"
+          size="sm"
           onClick={() => onReply('reject')}
-          className="flex-1 flex items-center justify-center gap-1.5 px-3 py-2 text-xs text-mc-error hover:bg-mc-hover transition-colors"
+          icon={<ShieldX size={11} />}
+          className="rounded-none"
         >
-          <ShieldX size={11} />
           拒绝
-        </button>
+        </Button>
       </div>
     </div>
   )

@@ -1,22 +1,34 @@
-// 技能视图 — 基于 mimo serve Skill API
-// 服务端自动发现：compose 内置技能 + 用户目录 + 项目目录技能
+// 技能视图 — Phase 4 T4.2 三栏布局
+// 左侧分类 + 中间技能列表 + 右侧详情面板
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useChatStore, selectors } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 import { isElectron, getAPI } from '@/lib/ipc'
 import { mimoClient } from '@/lib/mimoClient'
-import { Sparkles, Plus, FileCode, Trash2, BookOpen, Edit, EyeOff, Download, Loader2 } from 'lucide-react'
+import { Sparkles, Plus, Trash2, BookOpen, Edit, EyeOff, Download, Package, User, Layers, ExternalLink } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
+import TitleBar from '@/components/ui/TitleBar'
+import StatusDot from '@/components/ui/StatusDot'
+import EmptyHint from '@/components/ui/EmptyHint'
+import Spinner from '@/components/ui/Spinner'
 import type { SkillInfo } from '@/lib/mimoTypes'
 
-type SkillsTab = 'available' | 'store'
+type CategoryId = 'all' | 'compose' | 'user' | 'store'
+
+const CATEGORIES: { id: CategoryId; icon: typeof Sparkles; label: string }[] = [
+  { id: 'all', icon: Layers, label: '全部' },
+  { id: 'compose', icon: Package, label: '内置' },
+  { id: 'user', icon: User, label: '用户' },
+  { id: 'store', icon: BookOpen, label: '商店' },
+]
 
 export default function SkillsView() {
   const [skills, setSkills] = useState<SkillInfo[]>([])
   const [loading, setLoading] = useState(true)
-  const [tab, setTab] = useState<SkillsTab>('available')
+  const [category, setCategory] = useState<CategoryId>('all')
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [editorOpen, setEditorOpen] = useState(false)
   const [editingSkill, setEditingSkill] = useState<SkillInfo | null>(null)
   const [editorContent, setEditorContent] = useState('')
@@ -24,18 +36,12 @@ export default function SkillsView() {
   const [downloadOpen, setDownloadOpen] = useState(false)
   const [downloadUrl, setDownloadUrl] = useState('')
   const [downloading, setDownloading] = useState(false)
-  const [downloadingName, setDownloadingName] = useState<string | null>(null)
 
-  useEffect(() => {
-    loadSkills()
-  }, [])
+  useEffect(() => { loadSkills() }, [])
 
-  // 当 serverReady 变为 true 时重新加载技能（首次初始化完成后）
   useEffect(() => {
     const unsub = useChatStore.subscribe((state, prev) => {
-      if (selectors.serverReady(state) && !selectors.serverReady(prev)) {
-        loadSkills()
-      }
+      if (selectors.serverReady(state) && !selectors.serverReady(prev)) loadSkills()
     })
     return unsub
   }, [])
@@ -49,42 +55,54 @@ export default function SkillsView() {
         const data = await mimoClient.listSkills()
         setSkills(data || [])
       } else if (isElectron()) {
-        // Fallback: 从本地文件加载
         const data = await getAPI().files.readSkills()
         setSkills(data || [])
       }
     } catch {
-      // 离线时从本地加载
       if (isElectron()) {
-        try {
-          const data = await getAPI().files.readSkills()
-          setSkills(data || [])
-        } catch {
-          setSkills([])
-        }
+        try { setSkills(await getAPI().files.readSkills() || []) } catch { setSkills([]) }
       }
     }
     setLoading(false)
   }
 
-  // 可用技能（非隐藏）
-  const availableSkills = skills.filter(s => !s.hidden)
+  const isComposeSkill = (skill: SkillInfo) =>
+    (skill.location || '').includes('.bundle') || (skill.location || '').includes('compose')
 
-  // 创建自定义技能
+  const availableSkills = skills.filter(s => !s.hidden)
+  const composeSkills = useMemo(() => availableSkills.filter(isComposeSkill), [availableSkills])
+  const userSkills = useMemo(() => availableSkills.filter(s => !isComposeSkill(s)), [availableSkills])
+
+  const filteredSkills = useMemo(() => {
+    switch (category) {
+      case 'compose': return composeSkills
+      case 'user': return userSkills
+      case 'store': return [] // 商店不显示本地技能
+      default: return availableSkills
+    }
+  }, [category, availableSkills, composeSkills, userSkills])
+
+  const selectedSkill = useMemo(
+    () => availableSkills.find(s => s.name === selectedId) || null,
+    [selectedId, availableSkills],
+  )
+
   const handleCreate = () => {
     setEditingSkill(null)
     setEditorContent(getDefaultSkillContent())
     setEditorOpen(true)
   }
 
-  // 查看技能内容
   const handleView = (skill: SkillInfo) => {
+    setSelectedId(skill.name)
+  }
+
+  const handleEdit = (skill: SkillInfo) => {
     setEditingSkill(skill)
     setEditorContent(skill.content || getFallbackContent(skill.name))
     setEditorOpen(true)
   }
 
-  // 保存技能到本地文件
   const handleSave = async () => {
     if (!isElectron()) return
     const nameMatch = editorContent.match(/^---\n[\s\S]*?^name:\s*(.+)$/m)
@@ -94,14 +112,13 @@ export default function SkillsView() {
     loadSkills()
   }
 
-  // 删除本地技能
   const handleDelete = async (name: string) => {
     if (!isElectron()) return
     await getAPI().files.deleteSkill(name)
+    if (selectedId === name) setSelectedId(null)
     loadSkills()
   }
 
-  // 从 URL 下载技能（手动输入）
   const handleDownload = async () => {
     if (!downloadUrl.trim() || !isElectron()) return
     setDownloading(true)
@@ -121,443 +138,229 @@ export default function SkillsView() {
       loadSkills()
       useUIStore.getState().addToast(`技能 "${name}" 安装成功`, 'success')
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '未知错误'
-      useUIStore.getState().addToast(`下载失败: ${msg}`, 'error')
+      useUIStore.getState().addToast(`下载失败: ${err instanceof Error ? err.message : '未知错误'}`, 'error')
     } finally {
       setDownloading(false)
     }
   }
 
-  // 直接下载指定技能（从技能商店卡片）
-  const handleDirectDownload = async (item: typeof MODELSCOPE_FEATURED[number]) => {
-    if (!isElectron() || !item.skillUrl) {
-      // fallback: 打开手动输入弹窗
-      setDownloadUrl(item.url || '')
-      setDownloadOpen(true)
-      return
-    }
-    setDownloadingName(item.name)
-    try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 20_000)
-      const response = await fetch(item.skillUrl, { signal: controller.signal })
-      clearTimeout(timeout)
-      if (!response.ok) throw new Error(`HTTP ${response.status}`)
-      const content = await response.text()
-      if (!content.startsWith('---\n')) throw new Error('无效的 SKILL.md：缺少 YAML frontmatter')
-      const nameMatch = content.match(/^---\n[\s\S]*?^name:\s*(.+)$/m)
-      const name = nameMatch ? nameMatch[1].trim() : `skill-${Date.now()}`
-      await getAPI().files.writeSkill(name, content)
-      loadSkills()
-      useUIStore.getState().addToast(`技能 "${name}" 安装成功`, 'success')
-    } catch (err) {
-      const msg = err instanceof Error ? (err.name === 'AbortError' ? '下载超时' : err.message) : '未知错误'
-      useUIStore.getState().addToast(`下载 "${item.name}" 失败: ${msg}`, 'error')
-    } finally {
-      setDownloadingName(null)
+  const categoryCount = (id: CategoryId) => {
+    switch (id) {
+      case 'all': return availableSkills.length
+      case 'compose': return composeSkills.length
+      case 'user': return userSkills.length
+      case 'store': return 0
     }
   }
-
-  // 判断是否为 compose 内置技能（location 包含 compose bundle 路径）
-  const isComposeSkill = (skill: SkillInfo): boolean => {
-    return (skill.location || '').includes('.bundle') || (skill.location || '').includes('compose')
-  }
-
-  const composeSkills = availableSkills.filter(isComposeSkill)
-  const userSkills = availableSkills.filter(s => !isComposeSkill(s))
 
   return (
     <div className="flex flex-col h-full">
-      <div className="h-[36px] drag" />
-      {/* Header with tabs */}
-      <div className="flex items-center justify-between h-10 px-4 border-b border-mc-border-subtle">
-        <div className="flex items-center gap-3">
+      <TitleBar
+        icon={Sparkles}
+        title="技能"
+        actions={
           <div className="flex items-center gap-2">
-            <Sparkles size={14} strokeWidth={1.5} className="text-mc-text-muted" />
-            <span className="text-xs font-medium text-mc-text-secondary">技能</span>
+            {!serverConnected && <StatusDot tone="warning" />}
+            <Button variant="ghost" size="sm" icon={<Download size={12} />} onClick={() => setDownloadOpen(true)}>下载</Button>
+            <Button variant="ghost" size="sm" icon={<Plus size={12} />} onClick={handleCreate}>新建</Button>
           </div>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setTab('available')}
-              className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
-                tab === 'available' ? 'bg-mc-elevated text-mc-text' : 'text-mc-text-muted hover:text-mc-text hover:bg-mc-hover'
-              }`}
-            >
-              可用技能
-              {availableSkills.length > 0 && <span className="ml-1 text-[10px] text-mc-text-muted">{availableSkills.length}</span>}
-            </button>
-            <button
-              onClick={() => setTab('store')}
-              className={`flex items-center gap-1 px-2.5 py-1 text-xs rounded-md transition-colors ${
-                tab === 'store' ? 'bg-mc-elevated text-mc-text' : 'text-mc-text-muted hover:text-mc-text hover:bg-mc-hover'
-              }`}
-            >
-              <BookOpen size={10} />
-              技能商店
-            </button>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {!serverConnected && (
-            <span className="text-[10px] text-mc-warning mr-1">离线</span>
-          )}
-          <Button variant="ghost" size="sm" icon={<Download size={12} />} onClick={() => setDownloadOpen(true)}>
-            下载
-          </Button>
-          <Button variant="ghost" size="sm" icon={<Plus size={12} />} onClick={handleCreate}>
-            新建
-          </Button>
-        </div>
-      </div>
+        }
+      />
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-xs text-mc-text-muted">加载中...</p>
-          </div>
-        ) : tab === 'available' ? (
-          <AvailableSkillsTab
-            composeSkills={composeSkills}
-            userSkills={userSkills}
-            onView={handleView}
-            onDelete={handleDelete}
-            serverConnected={serverConnected}
-          />
-        ) : (
-          <SkillStoreTab
-            skills={availableSkills}
-            onView={handleView}
-            onDownload={() => setDownloadOpen(true)}
-            onDirectDownload={handleDirectDownload}
-            downloadingName={downloadingName}
-          />
+      <div className="flex flex-1 min-h-0">
+        {/* 左侧分类 */}
+        <aside className="w-36 shrink-0 border-r border-mc-border-subtle p-2 space-y-0.5">
+          {CATEGORIES.map(({ id, icon: Icon, label }) => (
+            <button
+              key={id}
+              onClick={() => { setCategory(id); setSelectedId(null) }}
+              className={`w-full flex items-center gap-2 px-2.5 py-2 text-xs rounded-md transition-colors ${
+                category === id
+                  ? 'bg-mc-brand-soft text-mc-brand font-medium'
+                  : 'text-mc-text-secondary hover:bg-mc-hover hover:text-mc-text'
+              }`}
+            >
+              <Icon size={13} strokeWidth={1.5} />
+              <span className="flex-1 text-left">{label}</span>
+              <span className="text-2xs opacity-60">{categoryCount(id)}</span>
+            </button>
+          ))}
+        </aside>
+
+        {/* 中间列表 */}
+        <div className="flex-1 overflow-y-auto p-2 min-w-0">
+          {loading ? (
+            <div className="flex items-center justify-center h-full"><Spinner size={16} /></div>
+          ) : category === 'store' ? (
+            <StoreContent onDownload={() => setDownloadOpen(true)} />
+          ) : filteredSkills.length === 0 ? (
+            <EmptyHint
+              icon={Sparkles}
+              title="暂无技能"
+              description={serverConnected ? '技能将自动从 compose/用户目录/项目目录发现' : '请确保 mimo serve 已启动'}
+            />
+          ) : (
+            <div className="space-y-0.5">
+              {filteredSkills.map((skill) => (
+                <SkillRow
+                  key={skill.name}
+                  skill={skill}
+                  isCompose={isComposeSkill(skill)}
+                  selected={selectedId === skill.name}
+                  onClick={() => handleView(skill)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* 右侧详情 */}
+        {selectedSkill && (
+          <aside className="w-80 shrink-0 border-l border-mc-border-subtle overflow-y-auto p-4 space-y-3">
+            <SkillDetailPanel
+              skill={selectedSkill}
+              isCompose={isComposeSkill(selectedSkill)}
+              onEdit={() => handleEdit(selectedSkill)}
+              onDelete={() => handleDelete(selectedSkill.name)}
+            />
+          </aside>
         )}
       </div>
 
-      {/* Download skill modal */}
-      <Modal
-        open={downloadOpen}
-        onClose={() => setDownloadOpen(false)}
-        title="下载技能"
-        width="max-w-md"
-      >
+      {/* Download modal */}
+      <Modal open={downloadOpen} onClose={() => setDownloadOpen(false)} title="下载技能">
         <div className="space-y-3">
-          <p className="text-xs text-mc-text-muted">
-            输入技能 SKILL.md 文件的 URL，系统将自动下载并保存到本地
-          </p>
-          <input
-            type="url"
-            value={downloadUrl}
-            onChange={(e) => setDownloadUrl(e.target.value)}
-            placeholder="https://example.com/SKILL.md"
-            className="w-full bg-mc-bg border border-mc-border rounded-lg px-3 py-2 text-xs text-mc-text focus:outline-none focus:border-mc-border-focus"
-          />
+          <p className="text-xs text-mc-text-muted">输入技能 SKILL.md 文件的 URL，系统将自动下载并保存到本地</p>
+          <input type="url" value={downloadUrl} onChange={(e) => setDownloadUrl(e.target.value)} placeholder="https://example.com/SKILL.md" className="w-full bg-mc-bg border border-mc-border rounded-lg px-3 py-2 text-xs text-mc-text focus:outline-none focus:border-mc-brand" />
           <div className="flex justify-end gap-2">
             <Button variant="ghost" size="sm" onClick={() => setDownloadOpen(false)}>取消</Button>
-            <Button variant="primary" size="sm" onClick={handleDownload} disabled={!downloadUrl.trim() || downloading}>
-              {downloading ? '下载中...' : '下载'}
-            </Button>
+            <Button variant="brand" size="sm" onClick={handleDownload} disabled={!downloadUrl.trim() || downloading}>{downloading ? '下载中...' : '下载'}</Button>
           </div>
         </div>
       </Modal>
 
-      {/* Skill viewer/editor modal */}
-      <Modal
-        open={editorOpen}
-        onClose={() => setEditorOpen(false)}
-        title={editingSkill ? `查看技能: ${editingSkill.name}` : '新建技能'}
-        width="max-w-2xl"
-      >
-        <textarea
-          value={editorContent}
-          onChange={(e) => setEditorContent(e.target.value)}
-          className="w-full h-[400px] bg-mc-bg border border-mc-border rounded-lg p-3 text-xs text-mc-text font-mono leading-relaxed resize-none focus:outline-none focus:border-mc-border-focus"
-          spellCheck={false}
-          placeholder="输入技能内容（YAML frontmatter + Markdown）..."
-        />
+      {/* Editor modal */}
+      <Modal open={editorOpen} onClose={() => setEditorOpen(false)} title={editingSkill ? `编辑: ${editingSkill.name}` : '新建技能'} width="max-w-2xl">
+        <textarea value={editorContent} onChange={(e) => setEditorContent(e.target.value)} className="w-full h-[400px] bg-mc-bg border border-mc-border rounded-lg p-3 text-xs text-mc-text font-mono leading-relaxed resize-none focus:outline-none focus:border-mc-brand" spellCheck={false} placeholder="输入技能内容（YAML frontmatter + Markdown）..." />
         <div className="flex justify-end gap-2 mt-3">
           <Button variant="ghost" size="sm" onClick={() => setEditorOpen(false)}>关闭</Button>
-          {(!editingSkill || !isComposeSkill(editingSkill)) && (
-            <Button variant="primary" size="sm" onClick={handleSave}>保存</Button>
-          )}
+          {(!editingSkill || !isComposeSkill(editingSkill)) && <Button variant="brand" size="sm" onClick={handleSave}>保存</Button>}
         </div>
       </Modal>
     </div>
   )
 }
 
-// === Available Skills Tab ===
-function AvailableSkillsTab({
-  composeSkills,
-  userSkills,
-  onView,
-  onDelete,
-  serverConnected,
-}: {
-  composeSkills: SkillInfo[]
-  userSkills: SkillInfo[]
-  onView: (skill: SkillInfo) => void
-  onDelete: (name: string) => void
-  serverConnected: boolean
+// === 技能行（紧凑列表项）===
+function SkillRow({ skill, isCompose, selected, onClick }: {
+  skill: SkillInfo; isCompose: boolean; selected: boolean; onClick: () => void
 }) {
-  if (composeSkills.length === 0 && userSkills.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-center space-y-2">
-          <FileCode size={24} strokeWidth={1} className="text-mc-text-muted mx-auto" />
-          <p className="text-xs text-mc-text-muted">暂无可用技能</p>
-          <p className="text-[10px] text-mc-text-muted">
-            {serverConnected ? '技能将自动从 compose/用户目录/项目目录发现' : '请确保 mimo serve 已启动'}
-          </p>
-        </div>
-      </div>
-    )
-  }
-
   return (
-    <div className="space-y-5">
-      {/* Compose 内置技能区 */}
-      {composeSkills.length > 0 && (
-        <div>
-          <h3 className="text-[10px] font-semibold text-mc-text-muted uppercase tracking-wider mb-2">
-            内置技能
-            <span className="ml-1 font-normal text-mc-text-muted normal-case">{composeSkills.length} 个</span>
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            {composeSkills.map((skill) => (
-              <SkillCard
-                key={skill.name}
-                skill={skill}
-                isCompose
-                onView={onView}
-                onDelete={onDelete}
-              />
-            ))}
-          </div>
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left transition-colors ${
+        selected ? 'bg-mc-brand-soft text-mc-text' : 'text-mc-text-secondary hover:bg-mc-hover hover:text-mc-text'
+      }`}
+    >
+      <Sparkles size={13} strokeWidth={1.5} className={selected ? 'text-mc-brand' : 'text-mc-text-muted'} />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs font-medium truncate">{skill.name}</span>
+          {isCompose && <span className="text-2xs text-mc-brand bg-mc-brand-soft px-1 py-0.5 rounded">内置</span>}
+          {skill.hidden && <EyeOff size={9} className="text-mc-text-muted" />}
         </div>
-      )}
-
-      {/* 用户/项目技能区 */}
-      {userSkills.length > 0 && (
-        <div>
-          <h3 className="text-[10px] font-semibold text-mc-text-muted uppercase tracking-wider mb-2">
-            用户技能
-            <span className="ml-1 font-normal text-mc-text-muted normal-case">{userSkills.length} 个</span>
-          </h3>
-          <div className="grid grid-cols-2 gap-3">
-            {userSkills.map((skill) => (
-              <SkillCard
-                key={skill.name}
-                skill={skill}
-                isCompose={false}
-                onView={onView}
-                onDelete={onDelete}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
+        {skill.description && <p className="text-2xs text-mc-text-muted truncate">{skill.description}</p>}
+      </div>
+    </button>
   )
 }
 
-// === Skill Store Tab ===
-function SkillStoreTab({ skills, onView, onDownload, onDirectDownload, downloadingName }: {
-  skills: SkillInfo[]
-  onView: (skill: SkillInfo) => void
-  onDownload: () => void
-  onDirectDownload: (item: typeof MODELSCOPE_FEATURED[number]) => void
-  downloadingName: string | null
+// === 技能详情面板 ===
+function SkillDetailPanel({ skill, isCompose, onEdit, onDelete }: {
+  skill: SkillInfo; isCompose: boolean; onEdit: () => void; onDelete: () => void
 }) {
   return (
-    <div className="space-y-5">
-      {/* 魔搭社区 */}
+    <>
+      <div className="flex items-start justify-between">
+        <div>
+          <h3 className="text-sm font-medium text-mc-text">{skill.name}</h3>
+          <div className="flex items-center gap-1.5 mt-1">
+            {isCompose ? (
+              <span className="text-2xs text-mc-brand bg-mc-brand-soft px-1.5 py-0.5 rounded">内置</span>
+            ) : (
+              <span className="text-2xs text-mc-success bg-mc-success/10 px-1.5 py-0.5 rounded">用户</span>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button variant="ghost" size="sm" icon={<Edit size={11} />} onClick={onEdit}>编辑</Button>
+          {!isCompose && <Button variant="danger" size="sm" icon={<Trash2 size={11} />} onClick={onDelete}>删除</Button>}
+        </div>
+      </div>
+
+      {skill.description && (
+        <p className="text-xs text-mc-text-secondary leading-relaxed">{skill.description}</p>
+      )}
+
+      {skill.location && (
+        <div className="text-2xs text-mc-text-muted font-mono truncate bg-mc-bg px-2 py-1 rounded">{skill.location}</div>
+      )}
+
+      {/* 内容预览 */}
+      {skill.content && (
+        <div className="mt-2">
+          <div className="text-2xs text-mc-text-muted uppercase tracking-wider mb-1">内容预览</div>
+          <pre className="text-2xs text-mc-text-muted bg-mc-bg rounded p-3 max-h-[300px] overflow-y-auto font-mono leading-relaxed whitespace-pre-wrap">
+            {skill.content.slice(0, 2000)}{skill.content.length > 2000 ? '\n...' : ''}
+          </pre>
+        </div>
+      )}
+    </>
+  )
+}
+
+// === 商店内容 ===
+function StoreContent({ onDownload }: { onDownload: () => void }) {
+  return (
+    <div className="space-y-4 p-2">
       <div>
         <div className="flex items-center justify-between mb-2">
-          <h3 className="text-[10px] font-semibold text-mc-text-muted uppercase tracking-wider">
-            魔搭社区 (ModelScope)
-          </h3>
-          <a
-            href="https://modelscope.cn/skills"
-            target="_blank"
-            rel="noopener"
-            className="text-[10px] text-mc-accent hover:underline"
-          >
-            打开官网 →
+          <h3 className="text-2xs font-semibold text-mc-text-muted uppercase tracking-wider">魔搭社区 (ModelScope)</h3>
+          <a href="https://modelscope.cn/skills" target="_blank" rel="noopener" className="inline-flex items-center gap-1 text-2xs text-mc-brand hover:underline">
+            打开官网 <ExternalLink size={9} />
           </a>
         </div>
-        <p className="text-[11px] text-mc-text-muted mb-3">
-          阿里魔搭社区 Skills 广场，涵盖开发工具、前端、代码质量、多媒体、移动开发等类别。
-          支持 Claude Code、Cursor、OpenClaw 等主流 Agent。
-        </p>
+        <p className="text-2xs text-mc-text-muted mb-3">阿里魔搭社区 Skills 广场，涵盖开发工具、前端、代码质量等类别。</p>
         <div className="grid grid-cols-2 gap-2 mb-3">
           {MODELSCOPE_FEATURED.map((item) => (
             <div key={item.name} className="mc-card p-3 space-y-1.5">
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-mc-text-secondary">{item.icon}</span>
+                <span className="text-2xs">{item.icon}</span>
                 <span className="text-xs font-medium text-mc-text">{item.name}</span>
               </div>
-              <p className="text-[10px] text-mc-text-muted line-clamp-2">{item.desc}</p>
-              <button
-                onClick={() => onDirectDownload(item)}
-                disabled={downloadingName === item.name}
-                className={`text-[10px] hover:underline transition-colors ${
-                  downloadingName === item.name ? 'text-mc-text-muted cursor-wait' : 'text-mc-accent'
-                }`}
-              >
-                {downloadingName === item.name ? '下载中...' : '下载安装 →'}
-              </button>
+              <p className="text-2xs text-mc-text-muted line-clamp-2">{item.desc}</p>
             </div>
           ))}
         </div>
-        <div className="p-3 bg-amber-500/5 border border-amber-500/10 rounded-lg">
-          <p className="text-[10px] text-amber-600">
-            提示：魔搭社区技能可通过 URL 下载。点击「下载」按钮，粘贴技能 SKILL.md 链接即可安装。
-            也可以直接访问 <a href="https://modelscope.cn/skills" target="_blank" rel="noopener" className="underline">modelscope.cn/skills</a> 浏览全部技能。
-          </p>
-        </div>
-      </div>
-
-      {/* 已发现技能 */}
-      <div>
-        <div className="flex items-center justify-between mb-2">
-          <h3 className="text-[10px] font-semibold text-mc-text-muted uppercase tracking-wider">
-            已发现的技能 ({skills.length})
-          </h3>
-        </div>
-        <p className="text-[11px] text-mc-text-muted mb-3">
-          mimo serve 自动从 compose 内置包(~16个) 和用户/项目目录发现：
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          {skills.map((skill) => (
-            <SkillCard
-              key={skill.name}
-              skill={skill}
-              isCompose={(skill.location || '').includes('.bundle') || (skill.location || '').includes('compose')}
-              onView={onView}
-              onDelete={() => {}}
-            />
-          ))}
-        </div>
+        <Button variant="secondary" size="sm" icon={<Download size={12} />} onClick={onDownload} className="w-full">
+          从 URL 下载技能
+        </Button>
       </div>
     </div>
   )
 }
 
 const MODELSCOPE_FEATURED = [
-  {
-    name: '代码审查',
-    icon: '🔍',
-    desc: '系统性代码审查：安全/性能/可维护性',
-    url: 'https://modelscope.cn/skills',
-    skillUrl: '',
-  },
-  {
-    name: 'API 设计',
-    icon: '🔌',
-    desc: 'RESTful API 设计规范：命名/版本/错误码',
-    url: 'https://modelscope.cn/skills',
-    skillUrl: '',
-  },
-  {
-    name: 'Bug 分析',
-    icon: '🐛',
-    desc: '结构化 Bug 定位：复现→定位→根因→修复',
-    url: 'https://modelscope.cn/skills',
-    skillUrl: '',
-  },
-  {
-    name: '前端组件',
-    icon: '🎨',
-    desc: 'React/Vue 组件开发最佳实践',
-    url: 'https://modelscope.cn/skills',
-    skillUrl: '',
-  },
+  { name: '代码审查', icon: '🔍', desc: '系统性代码审查：安全/性能/可维护性' },
+  { name: 'API 设计', icon: '🔌', desc: 'RESTful API 设计规范：命名/版本/错误码' },
+  { name: 'Bug 分析', icon: '🐛', desc: '结构化 Bug 定位：复现→定位→根因→修复' },
+  { name: '前端组件', icon: '🎨', desc: 'React/Vue 组件开发最佳实践' },
 ]
 
-// === Skill Card ===
-function SkillCard({
-  skill,
-  isCompose,
-  onView,
-  onDelete,
-}: {
-  skill: SkillInfo
-  isCompose: boolean
-  onView: (skill: SkillInfo) => void
-  onDelete: (name: string) => void
-}) {
-  return (
-    <div
-      onClick={() => onView(skill)}
-      className="mc-card p-4 cursor-pointer hover:border-mc-border-focus transition-colors group"
-    >
-      <div className="flex items-start justify-between">
-        <div className="space-y-1.5 flex-1 min-w-0">
-          <div className="flex items-center gap-1.5">
-            <h4 className="text-xs font-medium text-mc-text truncate">{skill.name}</h4>
-            {isCompose ? (
-              <span className="text-[9px] text-mc-accent bg-mc-accent/10 px-1.5 py-0.5 rounded shrink-0">内置</span>
-            ) : (
-              <span className="text-[9px] text-mc-success/70 bg-mc-success/5 px-1.5 py-0.5 rounded shrink-0">用户</span>
-            )}
-            {skill.hidden && (
-              <span className="text-[9px] text-mc-text-muted bg-mc-elevated px-1.5 py-0.5 rounded shrink-0">
-                <EyeOff size={9} className="inline" />
-              </span>
-            )}
-          </div>
-          {skill.description && (
-            <p className="text-[11px] text-mc-text-muted line-clamp-2">{skill.description}</p>
-          )}
-          <div className="text-[9px] text-mc-text-muted truncate">
-            {skill.location}
-          </div>
-        </div>
-        <div className="flex items-center gap-1 ml-2 shrink-0">
-          <button
-            onClick={(e) => { e.stopPropagation(); onView(skill) }}
-            className="p-1 text-mc-text-muted hover:text-mc-text transition-colors"
-            title="查看"
-          >
-            <Edit size={11} />
-          </button>
-          {!isCompose && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onDelete(skill.name) }}
-              className="opacity-0 group-hover:opacity-100 p-1 text-mc-text-muted hover:text-mc-error transition-all"
-              title="删除"
-            >
-              <Trash2 size={11} />
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function getFallbackContent(name: string): string {
-  return `---
-name: ${name}
-description: ""
----
-
-# ${name}
-
-技能内容不可用（服务端返回时未包含完整内容）
-`
+  return `---\nname: ${name}\ndescription: ""\n---\n\n# ${name}\n\n技能内容不可用（服务端返回时未包含完整内容）\n`
 }
 
 function getDefaultSkillContent(): string {
-  return `---
-name: my-skill
-description: "技能描述"
----
-
-# 技能标题
-
-在这里编写技能的具体指令和规则...
-`
+  return `---\nname: my-skill\ndescription: "技能描述"\n---\n\n# 技能标题\n\n在这里编写技能的具体指令和规则...\n`
 }
