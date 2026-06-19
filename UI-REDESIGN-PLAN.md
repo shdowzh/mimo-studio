@@ -1,8 +1,8 @@
-# MiMo Studio UI 重设计计划（Phase 2 / 3 / 4）
+# MiMo Studio UI 重设计计划（已归档）
 
-> **状态**：Phase 1（视觉基建）已完成，本文档为接手开发者准备的后续阶段实施手册。
+> **状态**：已归档。本计划为 2026-06-20 之前的旧版 UI 改造草案，实际最终交付的是 **OpenClaw 风格改造**，详见 [PROJECT.md](PROJECT.md) 的「V8 → V9 OpenClaw 风格重设计 + 新图标」章节。
 >
-> **Phase 1 已沉淀**：详见 [PHASE1-CHANGELOG.md](#phase-1-已完成回顾)。本文档假设你已读完 Phase 1 改动并理解新引入的 design tokens。
+> 本文档保留作为历史参考，其中「横向工程约定」「常见坑速查」仍具有可读性，但 Phase 2/3/4 的具体实现与最终代码不一致。
 
 ---
 
@@ -27,8 +27,11 @@
 | Phase 2 ✅ | Sidebar 可展开 + 会话列表分组/搜索 + 各 View 替换 TitleBar | 1.5 天 | 中（需迁移布局） | 导航专业度 |
 | Phase 3 ✅ | 消息气泡重设计：头像、Step 折叠摘要、Tool 卡片精简、Input 升级 | 2 天 | 中（保持 SSE/Part 兼容） | 日常使用核心 |
 | Phase 4 ✅ | Settings / Skills / Memory / MCP / Terminal / Onboarding 各页打磨 | 2 天（可并行） | 低 | 页面级别 |
+| **OpenClaw 实际交付** | 以本计划为参考但最终改为 OpenClaw 风格：统一窗口框架、AppHeader、宽 Sidebar、双边气泡、 coral 品牌色、新图标 | — | — | 全站 |
 
 **推进顺序建议**：Phase 2 → Phase 3 → Phase 4。Phase 4 各页可拆分独立 PR 并行。
+
+**实际最终改造**：由于用户明确要求参考 OpenClaw 截图风格，最终分 4 个 PR 完成：窗口框架+Token、AppHeader+Sidebar、ChatView 消息/输入、各 View 收口+全局搜索+新图标。详细变更见 [PROJECT.md](PROJECT.md)。
 
 **严禁事项**（保护 V7 的稳定性沉淀）：
 

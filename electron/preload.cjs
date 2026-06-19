@@ -98,4 +98,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('updater:downloaded', handler)
     },
   },
+
+  // === 平台标识（让渲染端区分 mac / win / linux 自绘 chrome） ===
+  platform: process.platform,
+
+  // === 窗口控制（frame:false 模式下渲染端调用） ===
+  window: {
+    minimize: () => ipcRenderer.invoke('window:minimize'),
+    maximize: () => ipcRenderer.invoke('window:maximize'),
+    close: () => ipcRenderer.invoke('window:close'),
+    isMaximized: () => ipcRenderer.invoke('window:isMaximized'),
+    onMaximizeChange: (callback) => {
+      const handler = (event, isMax) => callback(isMax)
+      ipcRenderer.on('window:maximize-change', handler)
+      return () => ipcRenderer.removeListener('window:maximize-change', handler)
+    },
+  },
 })

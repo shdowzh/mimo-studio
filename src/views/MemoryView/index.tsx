@@ -3,9 +3,7 @@
 
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react'
 import { isElectron, getAPI } from '@/lib/ipc'
-import { Brain, User, FileText, Save } from 'lucide-react'
-import Button from '@/components/ui/Button'
-import TitleBar from '@/components/ui/TitleBar'
+import { Brain, User, FileText } from 'lucide-react'
 
 type MemoryType = 'user' | 'memory'
 
@@ -77,28 +75,29 @@ export default function MemoryView() {
 
   return (
     <div className="flex flex-col h-full">
-      <TitleBar
-        icon={Brain}
-        title="记忆"
-        actions={
-          <div className="flex items-center gap-1">
-            {tabs.map(({ type, icon: Icon, label }) => (
-              <button
-                key={type}
-                onClick={() => { setActiveType(type); setLoading(true) }}
-                className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md transition-colors ${
-                  activeType === type
-                    ? 'bg-mc-elevated text-mc-text'
-                    : 'text-mc-text-muted hover:text-mc-text hover:bg-mc-hover'
-                }`}
-              >
-                <Icon size={12} />
-                {label}
-              </button>
-            ))}
-          </div>
-        }
-      />
+      {/* 工具栏 */}
+      <div className="shrink-0 flex items-center justify-between px-3 h-11 border-b border-mc-border-subtle no-drag">
+        <div className="flex items-center gap-2">
+          <Brain size={14} className="text-mc-text-muted" />
+          <span className="text-xs font-medium text-mc-text">记忆</span>
+        </div>
+        <div className="flex items-center gap-1">
+          {tabs.map(({ type, icon: Icon, label }) => (
+            <button
+              key={type}
+              onClick={() => { setActiveType(type); setLoading(true) }}
+              className={`flex items-center gap-1.5 px-2.5 py-1 text-xs rounded-md transition-colors ${
+                activeType === type
+                  ? 'bg-mc-bg-active text-mc-brand-text font-medium'
+                  : 'text-mc-text-muted hover:text-mc-text hover:bg-mc-hover'
+              }`}
+            >
+              <Icon size={12} />
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {loading ? (
         <div className="flex-1 flex items-center justify-center">

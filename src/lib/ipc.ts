@@ -66,6 +66,18 @@ export interface ElectronAPI {
     onProgress: (callback: (data: { percent: number; transferred: number; total: number }) => void) => () => void
     onDownloaded: (callback: (data: { version: string }) => void) => () => void
   }
+
+  // === 平台标识（来自主进程的 process.platform） ===
+  platform: NodeJS.Platform
+
+  // === 窗口控制（frame:false 自绘三按钮调用） ===
+  window: {
+    minimize: () => Promise<void>
+    maximize: () => Promise<boolean>
+    close: () => Promise<void>
+    isMaximized: () => Promise<boolean>
+    onMaximizeChange: (callback: (isMaximized: boolean) => void) => () => void
+  }
 }
 
 declare global {

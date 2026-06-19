@@ -3,139 +3,71 @@
 @tailwind utilities;
 
 @layer base {
-  /* === Theme: Dark (default) === */
-  :root, [data-theme="dark"] {
-    --bg-base: #09090b;
-    --bg-surface: #18181b;
-    --bg-elevated: #27272a;
-    --bg-hover: rgba(63, 63, 70, 0.25);
-    --border-default: #27272a;
-    --border-subtle: rgba(39, 39, 42, 0.5);
-    --border-focus: #94a3b8;
-    --text-primary: #f4f4f5;
-    --text-secondary: #a1a1aa;
-    --text-muted: #71717a;
-    --text-accent: #94a3b8;
-    --accent: #94a3b8;
-    --accent-hover: #cbd5e1;
-    --brand: #818cf8;
-    --brand-hover: #a5b4fc;
-    --brand-soft: rgba(129, 140, 248, 0.12);
-    --success: #10b981;
-    --error: #f87171;
-    --warning: #f59e0b;
-    --user-bubble: #27272a;
-    --assistant-bubble: rgba(24, 24, 27, 0);
-    --code-bg: #0d0d0f;
-    --selection-bg: rgba(148, 163, 184, 0.25);
-  }
+  /* ============================================================
+   * OpenClaw 风：浅色为主 + 珊瑚粉 (#FB7185) 品牌色
+   * 三态主题：system（跟随 OS）/ light / dark
+   * data-theme 由 themeStore 解析为 light 或 dark 后写入 <html>
+   * ============================================================ */
 
-  /* === Theme: Light === */
+  /* === Theme: Light (默认) === */
+  :root,
   [data-theme="light"] {
-    --bg-base: #fafafa;
-    --bg-surface: #f4f4f5;
-    --bg-elevated: #e4e4e7;
-    --bg-hover: rgba(212, 212, 216, 0.25);
-    --border-default: #d4d4d8;
-    --border-subtle: rgba(212, 212, 216, 0.5);
-    --border-focus: #64748b;
-    --text-primary: #18181b;
-    --text-secondary: #52525b;
-    --text-muted: #71717a;
-    --text-accent: #475569;
-    --accent: #64748b;
-    --accent-hover: #475569;
-    --brand: #6366f1;
-    --brand-hover: #4f46e5;
-    --brand-soft: rgba(99, 102, 241, 0.08);
-    --success: #059669;
-    --error: #dc2626;
-    --warning: #d97706;
-    --user-bubble: #e4e4e7;
-    --assistant-bubble: rgba(244, 244, 245, 0);
-    --code-bg: #f0f0f2;
-    --selection-bg: rgba(100, 116, 139, 0.2);
+    --bg-base:           #FAFAFA;
+    --bg-surface:        #FFFFFF;
+    --bg-elevated:       #F4F4F5;
+    --bg-hover:          rgba(244, 244, 245, 0.7);
+    --bg-active:         #FFE4E6;     /* rose-50 - active 项背景 */
+    --border-default:    #E4E4E7;
+    --border-subtle:     #F4F4F5;
+    --border-focus:      #FB7185;
+    --text-primary:      #18181B;
+    --text-secondary:    #52525B;
+    --text-muted:        #A1A1AA;
+    --text-accent:       #BE123C;     /* rose-700 - 品牌色文字 */
+    --accent:            #FB7185;
+    --accent-hover:      #F43F5E;
+    --brand:             #FB7185;     /* rose-400 - 主品牌色 */
+    --brand-hover:       #F43F5E;     /* rose-500 */
+    --brand-soft:        #FFE4E6;     /* rose-50 */
+    --brand-text:        #BE123C;     /* rose-700 - active 项文字 */
+    --user-bubble:       #FFE4E6;     /* rose-50 */
+    --user-bubble-text:  #9F1239;     /* rose-800 */
+    --assistant-bubble:  #F4F4F5;
+    --success:           #10B981;
+    --error:             #EF4444;
+    --warning:           #F59E0B;
+    --code-bg:           #F4F4F5;
+    --selection-bg:      rgba(251, 113, 133, 0.2);
   }
 
-  /* === Theme: Nord === */
-  [data-theme="nord"] {
-    --bg-base: #2e3440;
-    --bg-surface: #3b4252;
-    --bg-elevated: #434c5e;
-    --bg-hover: rgba(76, 86, 106, 0.25);
-    --border-default: #434c5e;
-    --border-subtle: rgba(67, 76, 94, 0.5);
-    --border-focus: #88c0d0;
-    --text-primary: #eceff4;
-    --text-secondary: #d8dee9;
-    --text-muted: #81a1c1;
-    --text-accent: #88c0d0;
-    --accent: #88c0d0;
-    --accent-hover: #8fbcbb;
-    --brand: #88c0d0;
-    --brand-hover: #8fbcbb;
-    --brand-soft: rgba(136, 192, 208, 0.15);
-    --success: #a3be8c;
-    --error: #bf616a;
-    --warning: #ebcb8b;
-    --user-bubble: #434c5e;
-    --assistant-bubble: rgba(59, 66, 82, 0);
-    --code-bg: #2e3440;
-    --selection-bg: rgba(136, 192, 208, 0.2);
-  }
-
-  /* === Theme: Catppuccin === */
-  [data-theme="catppuccin"] {
-    --bg-base: #1e1e2e;
-    --bg-surface: #181825;
-    --bg-elevated: #313244;
-    --bg-hover: rgba(69, 71, 90, 0.25);
-    --border-default: #313244;
-    --border-subtle: rgba(49, 50, 68, 0.5);
-    --border-focus: #cba6f7;
-    --text-primary: #cdd6f4;
-    --text-secondary: #bac2de;
-    --text-muted: #6c7086;
-    --text-accent: #cba6f7;
-    --accent: #cba6f7;
-    --accent-hover: #b4befe;
-    --brand: #cba6f7;
-    --brand-hover: #b4befe;
-    --brand-soft: rgba(203, 166, 247, 0.14);
-    --success: #a6e3a1;
-    --error: #f38ba8;
-    --warning: #f9e2af;
-    --user-bubble: #313244;
-    --assistant-bubble: rgba(24, 24, 37, 0);
-    --code-bg: #1e1e2e;
-    --selection-bg: rgba(203, 166, 247, 0.2);
-  }
-
-  /* === Theme: One Dark === */
-  [data-theme="one-dark"] {
-    --bg-base: #282c34;
-    --bg-surface: #21252b;
-    --bg-elevated: #2c313c;
-    --bg-hover: rgba(62, 68, 81, 0.25);
-    --border-default: #3e4451;
-    --border-subtle: rgba(62, 68, 81, 0.5);
-    --border-focus: #61afef;
-    --text-primary: #abb2bf;
-    --text-secondary: #828997;
-    --text-muted: #5c6370;
-    --text-accent: #61afef;
-    --accent: #61afef;
-    --accent-hover: #528bff;
-    --brand: #61afef;
-    --brand-hover: #528bff;
-    --brand-soft: rgba(97, 175, 239, 0.14);
-    --success: #98c379;
-    --error: #e06c75;
-    --warning: #e5c07b;
-    --user-bubble: #2c313c;
-    --assistant-bubble: rgba(33, 37, 43, 0);
-    --code-bg: #282c34;
-    --selection-bg: rgba(97, 175, 239, 0.2);
+  /* === Theme: Dark === */
+  [data-theme="dark"] {
+    --bg-base:           #0A0A0A;
+    --bg-surface:        #171717;
+    --bg-elevated:       #262626;
+    --bg-hover:          rgba(38, 38, 38, 0.6);
+    --bg-active:         rgba(251, 113, 133, 0.15);
+    --border-default:    #27272A;
+    --border-subtle:     rgba(39, 39, 42, 0.6);
+    --border-focus:      #FB7185;
+    --text-primary:      #FAFAFA;
+    --text-secondary:    #A1A1AA;
+    --text-muted:        #71717A;
+    --text-accent:       #FDA4AF;     /* rose-300 - 暗色下提亮 */
+    --accent:            #FB7185;
+    --accent-hover:      #FDA4AF;
+    --brand:             #FB7185;
+    --brand-hover:       #FDA4AF;
+    --brand-soft:        rgba(251, 113, 133, 0.12);
+    --brand-text:        #FDA4AF;
+    --user-bubble:       rgba(251, 113, 133, 0.18);
+    --user-bubble-text:  #FECDD3;
+    --assistant-bubble:  #1F1F23;
+    --success:           #34D399;
+    --error:             #F87171;
+    --warning:           #FBBF24;
+    --code-bg:           #0F0F11;
+    --selection-bg:      rgba(251, 113, 133, 0.28);
   }
 
   * {
@@ -157,7 +89,7 @@
     color: var(--text-primary);
   }
 
-  /* Inter font */
+  /* Inter font - 沿用现有 CDN，PR1 暂不本地化（需要打包字体资产，留给后续 PR） */
   @font-face {
     font-family: 'Inter';
     font-style: normal;
@@ -172,18 +104,18 @@
     color: var(--text-primary);
   }
 
-  /* Scrollbar — MiMo thin style */
+  /* Scrollbar — 细线条 */
   ::-webkit-scrollbar {
-    width: 4px;
-    height: 4px;
+    width: 6px;
+    height: 6px;
   }
   ::-webkit-scrollbar-track {
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
     background-color: var(--text-muted);
-    opacity: 0.3;
-    border-radius: 2px;
+    opacity: 0.25;
+    border-radius: 3px;
   }
   ::-webkit-scrollbar-thumb:hover {
     opacity: 0.5;
@@ -203,7 +135,6 @@
     @apply w-full bg-transparent border-0 border-b px-0 py-2 text-sm placeholder-opacity-50 focus:outline-none focus:ring-0 transition-colors;
     border-color: var(--border-default);
     color: var(--text-primary);
-    placeholder-color: var(--text-muted);
   }
   .mc-input:focus {
     border-color: var(--border-focus);
@@ -221,7 +152,6 @@
   }
   .mc-card:hover {
     border-color: var(--border-focus);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
   }
 
   /* Page enter animation */
@@ -250,7 +180,7 @@
 
   /* Modal scale-in */
   .animate-modal-in {
-    animation: modalIn 0.2s ease-out;
+    animation: modalIn 0.15s ease-out;
   }
   @keyframes modalIn {
     0% { opacity: 0; transform: scale(0.95) translateY(8px); }

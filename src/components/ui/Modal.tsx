@@ -20,7 +20,7 @@ export default function Modal({ open, onClose, title, children, width = 'max-w-m
         onClick={onClose}
       />
       {/* Content */}
-      <div className={`relative ${width} w-full mx-4 bg-mc-surface border border-mc-border rounded-xl shadow-2xl animate-modal-in max-h-[85vh] overflow-hidden flex flex-col`}>
+      <div className={`relative ${width} w-full mx-4 bg-mc-surface border border-mc-border rounded-2xl shadow-xl animate-modal-in max-h-[85vh] overflow-hidden flex flex-col`}>
         {title && (
           <div className="shrink-0 flex items-center justify-between px-5 py-3.5 border-b border-mc-border-subtle">
             <h2 className="text-sm font-semibold text-mc-text tracking-tight">{title}</h2>

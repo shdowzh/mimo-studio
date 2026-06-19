@@ -37,15 +37,17 @@ export default function ContextMenu({ x, y, items, onClose }: ContextMenuProps) 
   return (
     <div
       ref={ref}
-      className="fixed z-50 min-w-[160px] py-1 bg-mc-surface border border-mc-border rounded-md shadow-xl animate-fade-in"
+      className="fixed z-50 min-w-[160px] py-1 bg-mc-surface border border-mc-border rounded-lg shadow-xl animate-fade-in"
       style={{ left: x, top: y }}
     >
       {items.map((item, i) => (
         <button
           key={i}
           onClick={() => { item.onClick(); onClose() }}
-          className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-mc-hover transition-colors ${
-            item.danger ? 'text-mc-error' : 'text-mc-text-secondary hover:text-mc-text'
+          className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs rounded-md transition-colors ${
+            item.danger
+              ? 'text-mc-error hover:bg-mc-error/10 hover:text-mc-error'
+              : 'text-mc-text-secondary hover:text-mc-text hover:bg-mc-hover'
           }`}
         >
           {item.icon && <span className="shrink-0">{item.icon}</span>}

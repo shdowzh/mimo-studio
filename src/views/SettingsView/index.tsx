@@ -5,12 +5,11 @@ import { useState, useEffect } from 'react'
 import { isElectron, getAPI } from '@/lib/ipc'
 import { loadAllApiKeys, setApiKey, deleteApiKey } from '@/lib/secret'
 import { useMimoInstaller } from '@/hooks/useMimoInstaller'
-import { Settings as SettingsIcon, Palette, Info, Shield, RefreshCw, Download, AlertCircle, CheckCircle, Loader2, ChevronDown, ExternalLink } from 'lucide-react'
-import { useThemeStore, THEMES, type ThemeId } from '@/stores/themeStore'
+import { Settings as SettingsIcon, Palette, Info, Shield, Download, AlertCircle, CheckCircle, ChevronDown, ExternalLink, Monitor, Sun, Moon } from 'lucide-react'
+import { useThemeStore, type ThemeId } from '@/stores/themeStore'
 import { useUIStore } from '@/stores/uiStore'
 import { useChatStore, selectors } from '@/stores/chatStore'
 import { PROVIDER_TEMPLATES } from '@/config/providerTemplates'
-import TitleBar from '@/components/ui/TitleBar'
 import Button from '@/components/ui/Button'
 import StatusDot from '@/components/ui/StatusDot'
 import Spinner from '@/components/ui/Spinner'
@@ -32,7 +31,11 @@ export default function SettingsView() {
 
   return (
     <div className="flex flex-col h-full">
-      <TitleBar icon={SettingsIcon} title="设置" />
+      {/* 工具栏 */}
+      <div className="shrink-0 flex items-center gap-2 px-3 h-11 border-b border-mc-border-subtle no-drag">
+        <SettingsIcon size={14} className="text-mc-text-muted" />
+        <span className="text-xs font-medium text-mc-text">设置</span>
+      </div>
       <div className="flex flex-1 min-h-0">
         {/* 左侧 tab 列 */}
         <aside className="w-40 shrink-0 border-r border-mc-border-subtle p-2 space-y-0.5">
@@ -42,7 +45,7 @@ export default function SettingsView() {
               onClick={() => { setTab(id); setSettingsTab(id) }}
               className={`w-full flex items-center gap-2 px-2.5 py-2 text-xs rounded-md transition-colors ${
                 tab === id
-                  ? 'bg-mc-brand-soft text-mc-brand font-medium'
+                  ? 'bg-mc-bg-active text-mc-brand-text font-medium'
                   : 'text-mc-text-secondary hover:bg-mc-hover hover:text-mc-text'
               }`}
             >
@@ -64,7 +67,7 @@ export default function SettingsView() {
 
 // === Appearance ===
 function AppearanceTab() {
-  const { theme, setTheme } = useThemeStore()
+  const { theme, resolvedTheme, setTheme } = useThemeStore()
   const [fontSize, setFontSize] = useState(14)
 
   useEffect(() => {
@@ -80,34 +83,36 @@ function AppearanceTab() {
     document.documentElement.style.fontSize = `${size}px`
   }
 
+  const themeOptions: { id: ThemeId; label: string; icon: typeof Monitor }[] = [
+    { id: 'system', label: '跟随系统', icon: Monitor },
+    { id: 'light', label: '浅色', icon: Sun },
+    { id: 'dark', label: '深色', icon: Moon },
+  ]
+
   return (
     <div className="max-w-xl space-y-8">
       {/* 主题 */}
       <div>
-        <h3 className="text-sm font-medium text-mc-text mb-4">主题</h3>
-        <div className="grid grid-cols-3 gap-3">
-          {THEMES.map((t) => (
+        <h3 className="text-sm font-medium text-mc-text mb-1">主题</h3>
+        <p className="text-2xs text-mc-text-muted mb-4">
+          当前应用：{resolvedTheme === 'dark' ? '深色' : '浅色'}
+          {theme === 'system' && '（跟随系统）'}
+        </p>
+        <div className="inline-flex items-center gap-1 p-1 rounded-lg bg-mc-elevated border border-mc-border-subtle">
+          {themeOptions.map(({ id, label, icon: Icon }) => (
             <button
-              key={t.id}
-              onClick={() => setTheme(t.id)}
-              className={`group flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                theme === t.id
-                  ? 'border-mc-brand bg-mc-brand-soft shadow-md shadow-mc-brand/10'
-                  : 'border-mc-border-subtle hover:border-mc-border hover:shadow-md'
+              key={id}
+              onClick={() => setTheme(id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md transition-all ${
+                theme === id
+                  ? 'bg-mc-surface text-mc-brand-text shadow-sm font-medium'
+                  : 'text-mc-text-secondary hover:text-mc-text'
               }`}
+              aria-pressed={theme === id}
+              aria-label={label}
             >
-              <div className="w-full rounded-lg overflow-hidden border border-mc-border-subtle transition-transform group-hover:scale-[1.02]" style={{ aspectRatio: '3/2' }}>
-                <div className="h-1/3" style={{ background: t.preview.bg }} />
-                <div className="flex h-2/3">
-                  <div className="w-1/3" style={{ background: t.preview.surface }} />
-                  <div className="flex-1 flex flex-col gap-1 p-1.5" style={{ background: t.preview.bg }}>
-                    <div className="h-2 rounded-sm" style={{ background: t.preview.elevated }} />
-                    <div className="h-2 rounded-sm w-3/4" style={{ background: t.preview.elevated }} />
-                    <div className="h-2 rounded-sm w-1/2" style={{ background: t.preview.elevated }} />
-                  </div>
-                </div>
-              </div>
-              <span className={`text-xs ${theme === t.id ? 'text-mc-brand font-medium' : 'text-mc-text-muted'}`}>{t.name}</span>
+              <Icon size={13} strokeWidth={1.5} />
+              {label}
             </button>
           ))}
         </div>
@@ -119,7 +124,7 @@ function AppearanceTab() {
         <div className="mc-card p-5 space-y-4">
           <div className="flex items-center justify-between">
             <span className="text-xs text-mc-text-secondary">界面字号</span>
-            <span className="text-xs text-mc-brand bg-mc-brand-soft px-2 py-0.5 rounded font-medium">{fontSize}px</span>
+            <span className="text-xs text-mc-brand-text bg-mc-brand-soft px-2 py-0.5 rounded font-medium">{fontSize}px</span>
           </div>
           <input
             type="range"

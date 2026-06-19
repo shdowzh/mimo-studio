@@ -56,7 +56,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             <div
               key={s}
               className={`h-1 rounded-full transition-all duration-300 ${
-                s <= step ? 'w-8 bg-mc-accent' : 'w-4 bg-mc-border'
+                s <= step ? 'w-8 bg-mc-brand' : 'w-4 bg-mc-border'
               }`}
             />
           ))}
@@ -66,8 +66,8 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
         {step === 1 && (
           <div className="text-center space-y-6 animate-fade-in">
             <div className="flex justify-center">
-              <div className="w-16 h-16 rounded-2xl bg-mc-elevated flex items-center justify-center">
-                <MessageSquare size={28} strokeWidth={1.5} className="text-mc-accent" />
+              <div className="w-16 h-16 rounded-2xl bg-mc-brand-soft flex items-center justify-center">
+                <MessageSquare size={28} strokeWidth={1.5} className="text-mc-brand" />
               </div>
             </div>
             <div className="space-y-2">
@@ -86,7 +86,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 </div>
               ))}
             </div>
-            <Button variant="primary" size="lg" onClick={() => setStep(2)} className="w-full">
+            <Button variant="brand" size="lg" onClick={() => setStep(2)} className="w-full">
               开始使用
               <ChevronRight size={14} />
             </Button>
@@ -109,7 +109,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             </div>
 
             {/* Status display */}
-            <div className="mc-card p-4 space-y-3">
+            <div className="mc-card rounded-2xl p-4 space-y-3">
               {mimoStatus === 'checking' && (
                 <div className="flex items-center gap-2 justify-center">
                   <span className="w-2 h-2 bg-mc-text-muted rounded-full animate-pulse" />
@@ -129,7 +129,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               {mimoStatus === 'not-installed' && (
                 <div className="space-y-3">
                   <p className="text-xs text-mc-text-secondary">未检测到 MiMo CLI</p>
-                  <Button variant="primary" size="sm" onClick={handleInstallMimo} className="w-full">
+                  <Button variant="brand" size="sm" onClick={handleInstallMimo} className="w-full">
                     安装 MiMo CLI
                   </Button>
                 </div>
@@ -139,16 +139,16 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 justify-center">
                     {progress === null ? (
-                      <Download size={14} className="text-mc-accent animate-pulse" />
+                      <Download size={14} className="text-mc-brand animate-pulse" />
                     ) : (
-                      <span className="text-sm font-medium text-mc-accent">{progress}%</span>
+                      <span className="text-sm font-medium text-mc-brand">{progress}%</span>
                     )}
                     <span className="text-xs text-mc-text-secondary">正在安装...</span>
                   </div>
                   {stepName && <p className="text-[10px] text-mc-text-muted text-center">{stepName}</p>}
                   {progress !== null && (
                     <div className="w-full bg-mc-elevated rounded-full h-1.5 overflow-hidden">
-                      <div className="bg-mc-accent h-1.5 rounded-full transition-all duration-300" style={{ width: `${Math.max(progress, 5)}%` }} />
+                      <div className="bg-mc-brand h-1.5 rounded-full transition-all duration-300" style={{ width: `${Math.max(progress, 5)}%` }} />
                     </div>
                   )}
                   {installLog && (
@@ -161,7 +161,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
 
               {mimoStatus === 'connecting' && (
                 <div className="flex items-center gap-2 justify-center">
-                  <Loader2 size={14} className="text-mc-accent animate-spin" />
+                  <Loader2 size={14} className="text-mc-brand animate-spin" />
                   <span className="text-xs text-mc-text-secondary">CLI 已安装，正在连接 MiMo 服务...</span>
                 </div>
               )}
@@ -193,7 +193,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
                 跳过
               </Button>
               {mimoStatus === 'installed' && (
-                <Button variant="primary" size="sm" onClick={() => setStep(3)} className="flex-1">
+                <Button variant="brand" size="sm" onClick={() => setStep(3)} className="flex-1">
                   下一步
                 </Button>
               )}
@@ -215,7 +215,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
             </div>
 
             {/* Checklist */}
-            <div className="mc-card p-4 space-y-2.5 text-left">
+            <div className="mc-card rounded-2xl p-4 space-y-2.5 text-left">
               <CheckItem label="MiMo API 已配置" done />
               <CheckItem label="默认模型：MiMo" done />
               <CheckItem label="MiMo 工作流技能已创建" done />
@@ -226,7 +226,7 @@ export default function Onboarding({ onComplete }: OnboardingProps) {
               />
             </div>
 
-            <Button variant="primary" size="lg" onClick={handleComplete} className="w-full">
+            <Button variant="brand" size="lg" onClick={handleComplete} className="w-full">
               开始聊天
               <ChevronRight size={14} />
             </Button>
