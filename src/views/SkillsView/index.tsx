@@ -9,7 +9,6 @@ import { mimoClient } from '@/lib/mimoClient'
 import { Sparkles, Plus, Trash2, BookOpen, Edit, EyeOff, Download, Package, User, Layers, ExternalLink } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
-import TitleBar from '@/components/ui/TitleBar'
 import StatusDot from '@/components/ui/StatusDot'
 import EmptyHint from '@/components/ui/EmptyHint'
 import Spinner from '@/components/ui/Spinner'
@@ -155,17 +154,18 @@ export default function SkillsView() {
 
   return (
     <div className="flex flex-col h-full">
-      <TitleBar
-        icon={Sparkles}
-        title="技能"
-        actions={
-          <div className="flex items-center gap-2">
-            {!serverConnected && <StatusDot tone="warning" />}
-            <Button variant="ghost" size="sm" icon={<Download size={12} />} onClick={() => setDownloadOpen(true)}>下载</Button>
-            <Button variant="ghost" size="sm" icon={<Plus size={12} />} onClick={handleCreate}>新建</Button>
-          </div>
-        }
-      />
+      {/* 工具栏 */}
+      <div className="shrink-0 flex items-center justify-between px-3 h-11 border-b border-mc-border-subtle no-drag">
+        <div className="flex items-center gap-2">
+          <Sparkles size={14} className="text-mc-text-muted" />
+          <span className="text-xs font-medium text-mc-text">技能</span>
+          {!serverConnected && <StatusDot tone="warning" />}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" icon={<Download size={12} />} onClick={() => setDownloadOpen(true)}>下载</Button>
+          <Button variant="ghost" size="sm" icon={<Plus size={12} />} onClick={handleCreate}>新建</Button>
+        </div>
+      </div>
 
       <div className="flex flex-1 min-h-0">
         {/* 左侧分类 */}
@@ -176,7 +176,7 @@ export default function SkillsView() {
               onClick={() => { setCategory(id); setSelectedId(null) }}
               className={`w-full flex items-center gap-2 px-2.5 py-2 text-xs rounded-md transition-colors ${
                 category === id
-                  ? 'bg-mc-brand-soft text-mc-brand font-medium'
+                  ? 'bg-mc-bg-active text-mc-brand-text font-medium'
                   : 'text-mc-text-secondary hover:bg-mc-hover hover:text-mc-text'
               }`}
             >
@@ -258,8 +258,8 @@ function SkillRow({ skill, isCompose, selected, onClick }: {
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left transition-colors ${
-        selected ? 'bg-mc-brand-soft text-mc-text' : 'text-mc-text-secondary hover:bg-mc-hover hover:text-mc-text'
+      className={`relative w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-left transition-colors ${
+        selected ? 'bg-mc-bg-active text-mc-brand-text font-medium' : 'text-mc-text-secondary hover:bg-mc-hover hover:text-mc-text'
       }`}
     >
       <Sparkles size={13} strokeWidth={1.5} className={selected ? 'text-mc-brand' : 'text-mc-text-muted'} />
@@ -271,6 +271,7 @@ function SkillRow({ skill, isCompose, selected, onClick }: {
         </div>
         {skill.description && <p className="text-2xs text-mc-text-muted truncate">{skill.description}</p>}
       </div>
+      {selected && <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-mc-brand rounded-r" />}
     </button>
   )
 }

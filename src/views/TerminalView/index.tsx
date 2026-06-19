@@ -6,7 +6,6 @@ import { useEffect, useRef, useState } from 'react'
 import { isElectron, getAPI } from '@/lib/ipc'
 import { mimoClient } from '@/lib/mimoClient'
 import { Terminal as TerminalIcon, AlertCircle, Trash2 } from 'lucide-react'
-import TitleBar from '@/components/ui/TitleBar'
 import StatusDot from '@/components/ui/StatusDot'
 
 export default function TerminalView() {
@@ -180,42 +179,43 @@ export default function TerminalView() {
 
   return (
     <div className="flex flex-col h-full">
-      <TitleBar
-        icon={TerminalIcon}
-        title="终端"
-        subBar={
-          <div className="flex items-center gap-2 w-full">
-            <StatusDot tone={ptyReady ? 'success' : serverConnected ? 'warning' : 'muted'} />
-            <span className="text-2xs text-mc-text-muted">
-              {ptyReady ? (serverConnected ? 'PTY' : '本地') : serverConnected ? '连接中...' : '本地'}
+      {/* 工具栏 */}
+      <div className="shrink-0 flex items-center justify-between px-3 h-11 border-b border-mc-border-subtle no-drag">
+        <div className="flex items-center gap-2">
+          <TerminalIcon size={14} className="text-mc-text-muted" />
+          <span className="text-xs font-medium text-mc-text">终端</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <StatusDot tone={ptyReady ? 'success' : serverConnected ? 'warning' : 'muted'} />
+          <span className="text-2xs text-mc-text-muted">
+            {ptyReady ? (serverConnected ? 'PTY' : '本地') : serverConnected ? '连接中...' : '本地'}
+          </span>
+          {errorMsg && (
+            <span className="text-2xs text-mc-error truncate flex items-center gap-1">
+              <AlertCircle size={10} />{errorMsg}
             </span>
-            {errorMsg && (
-              <span className="text-2xs text-mc-error truncate flex items-center gap-1">
-                <AlertCircle size={10} />{errorMsg}
-              </span>
-            )}
-            <div className="flex-1" />
-            <select
-              value={fontSize}
-              onChange={(e) => setFontSize(Number(e.target.value))}
-              className="text-2xs bg-mc-surface border border-mc-border-subtle rounded px-1.5 py-0.5 text-mc-text-muted focus:outline-none appearance-none pr-5"
-              style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2371717a'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center' }}
-            >
-              <option value="12">12px</option>
-              <option value="13">13px</option>
-              <option value="14">14px</option>
-              <option value="15">15px</option>
-            </select>
-            <button
-              onClick={handleClear}
-              className="p-1 text-mc-text-muted hover:text-mc-text hover:bg-mc-hover rounded transition-colors"
-              title="清屏"
-            >
-              <Trash2 size={12} />
-            </button>
-          </div>
-        }
-      />
+          )}
+          <select
+            value={fontSize}
+            onChange={(e) => setFontSize(Number(e.target.value))}
+            className="text-2xs bg-mc-surface border border-mc-border-subtle rounded px-1.5 py-0.5 text-mc-text-muted focus:outline-none appearance-none pr-5"
+            style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2371717a'/%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 6px center' }}
+          >
+            <option value="12">12px</option>
+            <option value="13">13px</option>
+            <option value="14">14px</option>
+            <option value="15">15px</option>
+          </select>
+          <button
+            onClick={handleClear}
+            className="p-1 text-mc-text-muted hover:text-mc-text hover:bg-mc-hover rounded transition-colors"
+            title="清屏"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      </div>
+
       <div ref={terminalRef} className="flex-1" style={{ minHeight: 0 }} />
     </div>
   )

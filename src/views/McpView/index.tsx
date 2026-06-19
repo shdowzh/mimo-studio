@@ -7,7 +7,6 @@ import { Plug, Plus, Trash2 } from 'lucide-react'
 import Button from '@/components/ui/Button'
 import Modal from '@/components/ui/Modal'
 import Input from '@/components/ui/Input'
-import TitleBar from '@/components/ui/TitleBar'
 import StatusDot from '@/components/ui/StatusDot'
 import EmptyHint from '@/components/ui/EmptyHint'
 import type { McpServer } from '@/lib/types'
@@ -79,18 +78,19 @@ export default function McpView() {
 
   return (
     <div className="flex flex-col h-full">
-      <TitleBar
-        icon={Plug}
-        title="MCP 服务器"
-        actions={
-          <div className="flex items-center gap-2">
-            <span className="text-2xs text-mc-text-muted bg-mc-elevated px-1.5 py-0.5 rounded">仅本地配置</span>
-            <Button variant="ghost" size="sm" icon={<Plus size={12} />} onClick={() => setAddModalOpen(true)}>
-              添加
-            </Button>
-          </div>
-        }
-      />
+      {/* 工具栏 */}
+      <div className="shrink-0 flex items-center justify-between px-3 h-11 border-b border-mc-border-subtle no-drag">
+        <div className="flex items-center gap-2">
+          <Plug size={14} className="text-mc-text-muted" />
+          <span className="text-xs font-medium text-mc-text">MCP 服务器</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-2xs text-mc-text-muted bg-mc-elevated px-1.5 py-0.5 rounded">仅本地配置</span>
+          <Button variant="ghost" size="sm" icon={<Plus size={12} />} onClick={() => setAddModalOpen(true)}>
+            添加
+          </Button>
+        </div>
+      </div>
 
       {/* 仅本地提示 */}
       <div className="px-4 py-2 border-b border-mc-border-subtle/50 bg-mc-warning/5">
@@ -159,13 +159,13 @@ export default function McpView() {
             <div className="flex gap-2">
               <button
                 onClick={() => setFormType('stdio')}
-                className={`px-3 py-1.5 text-xs rounded-md ${formType === 'stdio' ? 'bg-mc-brand-soft text-mc-brand' : 'text-mc-text-muted hover:bg-mc-hover'}`}
+                className={`px-3 py-1.5 text-xs rounded-md transition-colors ${formType === 'stdio' ? 'bg-mc-bg-active text-mc-brand-text font-medium' : 'text-mc-text-muted hover:bg-mc-hover'}`}
               >
                 stdio
               </button>
               <button
                 onClick={() => setFormType('http')}
-                className={`px-3 py-1.5 text-xs rounded-md ${formType === 'http' ? 'bg-mc-brand-soft text-mc-brand' : 'text-mc-text-muted hover:bg-mc-hover'}`}
+                className={`px-3 py-1.5 text-xs rounded-md transition-colors ${formType === 'http' ? 'bg-mc-bg-active text-mc-brand-text font-medium' : 'text-mc-text-muted hover:bg-mc-hover'}`}
               >
                 HTTP
               </button>

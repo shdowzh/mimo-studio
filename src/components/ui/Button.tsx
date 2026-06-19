@@ -12,7 +12,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<Variant, string> = {
   // brand: 主色行动按钮（CTA / 表单提交）
-  brand: 'bg-mc-brand text-white hover:bg-mc-brand-hover shadow-sm shadow-mc-brand/20',
+  brand: 'bg-mc-brand text-white hover:bg-mc-brand-hover',
   // primary: 文本反白（次于 brand 的"重要"按钮）
   primary: 'bg-mc-text text-mc-bg hover:opacity-90',
   // secondary: 卡面之上的常规按钮

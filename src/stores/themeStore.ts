@@ -1,66 +1,86 @@
+// 三态主题模型：system / light / dark
+// system 时跟随 prefers-color-scheme，并随 OS 切换动态更新
+// resolvedTheme 是真正写入 <html data-theme> 的值，仅有 light/dark 两种
+//
+// 视觉上 OpenClaw 风默认浅色，所以 system 在多数桌面环境下会落到 light。
+
 import { create } from 'zustand'
 import { isElectron, getAPI } from '@/lib/ipc'
 
-export type ThemeId = 'dark' | 'light' | 'nord' | 'catppuccin' | 'one-dark'
-
-export const THEMES: { id: ThemeId; name: string; preview: { bg: string; surface: string; elevated: string; accent: string } }[] = [
-  {
-    id: 'dark',
-    name: '深色',
-    preview: { bg: '#09090b', surface: '#18181b', elevated: '#27272a', accent: '#94a3b8' },
-  },
-  {
-    id: 'light',
-    name: '浅色',
-    preview: { bg: '#fafafa', surface: '#f4f4f5', elevated: '#e4e4e7', accent: '#64748b' },
-  },
-  {
-    id: 'nord',
-    name: 'Nord',
-    preview: { bg: '#2e3440', surface: '#3b4252', elevated: '#434c5e', accent: '#88c0d0' },
-  },
-  {
-    id: 'catppuccin',
-    name: 'Catppuccin',
-    preview: { bg: '#1e1e2e', surface: '#181825', elevated: '#313244', accent: '#cba6f7' },
-  },
-  {
-    id: 'one-dark',
-    name: 'One Dark',
-    preview: { bg: '#282c34', surface: '#21252b', elevated: '#2c313c', accent: '#61afef' },
-  },
-]
+export type ThemeId = 'system' | 'light' | 'dark'
+export type ResolvedTheme = 'light' | 'dark'
 
 interface ThemeState {
   theme: ThemeId
+  resolvedTheme: ResolvedTheme
   setTheme: (theme: ThemeId) => void
   loadTheme: () => Promise<void>
+  /** 内部：监听 prefers-color-scheme，随 OS 变化更新 resolvedTheme */
+  _initSystemListener: () => void
 }
 
-export const useThemeStore = create<ThemeState>()((set) => ({
-  theme: 'dark',
+const VALID_THEMES: ThemeId[] = ['system', 'light', 'dark']
+
+function getSystemPreference(): ResolvedTheme {
+  if (typeof window === 'undefined' || !window.matchMedia) return 'light'
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
+
+function resolve(theme: ThemeId): ResolvedTheme {
+  return theme === 'system' ? getSystemPreference() : theme
+}
+
+function applyResolved(resolved: ResolvedTheme) {
+  document.documentElement.setAttribute('data-theme', resolved)
+}
+
+let systemListenerAttached = false
+
+export const useThemeStore = create<ThemeState>()((set, get) => ({
+  theme: 'system',
+  resolvedTheme: 'light',
 
   setTheme: (theme: ThemeId) => {
-    set({ theme })
-    document.documentElement.setAttribute('data-theme', theme)
+    const resolved = resolve(theme)
+    set({ theme, resolvedTheme: resolved })
+    applyResolved(resolved)
     if (isElectron()) {
       getAPI().settings.set('theme', theme)
     }
   },
 
   loadTheme: async () => {
-    if (!isElectron()) return
-    try {
-      const saved = await getAPI().settings.get('theme')
-      const theme = (saved as ThemeId) || 'dark'
-      // 只接受有效主题
-      const validThemes: ThemeId[] = ['dark', 'light', 'nord', 'catppuccin', 'one-dark']
-      const finalTheme = validThemes.includes(theme) ? theme : 'dark'
-      set({ theme: finalTheme })
-      document.documentElement.setAttribute('data-theme', finalTheme)
-    } catch {
-      // 默认 dark
-      document.documentElement.setAttribute('data-theme', 'dark')
+    let theme: ThemeId = 'system'
+    if (isElectron()) {
+      try {
+        const saved = await getAPI().settings.get('theme')
+        if (saved && VALID_THEMES.includes(saved as ThemeId)) {
+          theme = saved as ThemeId
+        }
+      } catch {
+        // fallthrough
+      }
     }
+    const resolved = resolve(theme)
+    set({ theme, resolvedTheme: resolved })
+    applyResolved(resolved)
+    get()._initSystemListener()
+  },
+
+  _initSystemListener: () => {
+    if (systemListenerAttached || typeof window === 'undefined' || !window.matchMedia) return
+    systemListenerAttached = true
+    const mql = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = () => {
+      // 仅当当前是 system 模式时才跟随
+      if (get().theme === 'system') {
+        const next: ResolvedTheme = mql.matches ? 'dark' : 'light'
+        set({ resolvedTheme: next })
+        applyResolved(next)
+      }
+    }
+    // Safari 旧版用 addListener，新版统一 addEventListener
+    if (mql.addEventListener) mql.addEventListener('change', handler)
+    else mql.addListener(handler)
   },
 }))

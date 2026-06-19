@@ -512,5 +512,3 @@ export interface HealthResponse {
 // ============================================================
 
 export type ViewId = 'chat' | 'terminal' | 'memory' | 'skills' | 'mcp' | 'settings'
-
-export type ThemeId = 'dark' | 'light' | 'nord' | 'catppuccin' | 'one-dark'

@@ -8,12 +8,13 @@ export default {
   theme: {
     extend: {
       colors: {
-        // MiMo Code design tokens — mapped to CSS variables for theming
+        // OpenClaw 风设计 token — CSS variables 驱动主题
         mc: {
           bg: 'var(--bg-base)',
           surface: 'var(--bg-surface)',
           elevated: 'var(--bg-elevated)',
           hover: 'var(--bg-hover)',
+          'bg-active': 'var(--bg-active)',
           border: 'var(--border-default)',
           'border-subtle': 'var(--border-subtle)',
           'border-focus': 'var(--border-focus)',
@@ -26,6 +27,10 @@ export default {
           brand: 'var(--brand)',
           'brand-hover': 'var(--brand-hover)',
           'brand-soft': 'var(--brand-soft)',
+          'brand-text': 'var(--brand-text)',
+          'user-bubble': 'var(--user-bubble)',
+          'user-bubble-text': 'var(--user-bubble-text)',
+          'assistant-bubble': 'var(--assistant-bubble)',
           success: 'var(--success)',
           error: 'var(--error)',
           warning: 'var(--warning)',
@@ -44,7 +49,7 @@ export default {
       },
       spacing: {
         sidebar: '52px',
-        'sidebar-expanded': '240px',
+        'sidebar-expanded': '220px',
         'conv-list': '220px',
       },
       borderRadius: {

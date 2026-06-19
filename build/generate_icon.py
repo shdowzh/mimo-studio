@@ -1,154 +1,139 @@
-"""Generate ICO and PNG icons for Mimo Chat using pure Pillow"""
-import math
+"""Generate ICO and PNG icons for MiMo Studio — OpenClaw coral style"""
 from PIL import Image, ImageDraw
 
-SIZE = 512
+SIZE = 1024
 
-def create_icon(size):
+
+def lerp(a: int, b: int, t: float) -> int:
+    return int(a + (b - a) * t)
+
+
+def hex_to_rgba(h: str, alpha: int = 255):
+    h = h.lstrip('#')
+    return tuple(int(h[i:i+2], 16) for i in (0, 2, 4)) + (alpha,)
+
+
+def create_icon(size: int) -> Image.Image:
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
-    s = size / 512  # scale factor
+    s = size / SIZE
 
-    # --- Background: rounded square with gradient ---
-    corner_r = int(108 * s)
+    # --- Background: rounded square with subtle rose->white gradient ---
+    corner_r = int(220 * s)
+    bg_top = hex_to_rgba("#FFF1F2")
+    bg_bottom = hex_to_rgba("#FFFFFF")
 
-    for i in range(size):
-        t = i / size
-        r_c = int(99 + (59 - 99) * t)
-        g_c = int(102 + (130 - 102) * t)
-        b_c = int(241 + (246 - 241) * t)
-        draw.rectangle(
-            [0, i, size, i + 1],
-            fill=(r_c, g_c, b_c, 255)
-        )
+    # Draw vertical gradient
+    for y in range(size):
+        t = y / size
+        r = lerp(bg_top[0], bg_bottom[0], t)
+        g = lerp(bg_top[1], bg_bottom[1], t)
+        b = lerp(bg_top[2], bg_bottom[2], t)
+        draw.rectangle([0, y, size, y + 1], fill=(r, g, b, 255))
 
-    # Round corners
+    # Round corners via mask
     mask = Image.new("L", (size, size), 0)
     mask_draw = ImageDraw.Draw(mask)
     mask_draw.rounded_rectangle([0, 0, size, size], radius=corner_r, fill=255)
-
     bg = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     bg.paste(img, mask=mask)
     img = bg
     draw = ImageDraw.Draw(img)
 
-    # --- Decorative circles ---
-    draw.ellipse(
-        [int(300 * s), int(20 * s), int(520 * s), int(240 * s)],
-        fill=(255, 255, 255, 15)
+    # --- Coral chat bubble ---
+    bubble_w = int(560 * s)
+    bubble_h = int(480 * s)
+    bubble_x = (size - bubble_w) // 2
+    bubble_y = (size - bubble_h) // 2 - int(30 * s)
+    bubble_r = int(120 * s)
+    coral = hex_to_rgba("#FB7185")
+    coral_dark = hex_to_rgba("#F43F5E")
+
+    # Soft drop shadow
+    shadow_off = int(16 * s)
+    shadow_blur = int(32 * s)
+    shadow = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    shadow_draw = ImageDraw.Draw(shadow)
+    shadow_draw.rounded_rectangle(
+        [bubble_x + shadow_off, bubble_y + shadow_off, bubble_x + bubble_w + shadow_off, bubble_y + bubble_h + shadow_off],
+        radius=bubble_r,
+        fill=(251, 113, 133, 40),
     )
-    draw.ellipse(
-        [int(30 * s), int(320 * s), int(220 * s), int(510 * s)],
-        fill=(255, 255, 255, 10)
+    # Blur shadow roughly by resizing down/up
+    shadow = shadow.resize((size // 8, size // 8), Image.Resampling.LANCZOS).resize((size, size), Image.Resampling.LANCZOS)
+    img = Image.alpha_composite(img, shadow)
+    draw = ImageDraw.Draw(img)
+
+    # Bubble body with subtle top highlight
+    draw.rounded_rectangle(
+        [bubble_x, bubble_y, bubble_x + bubble_w, bubble_y + bubble_h],
+        radius=bubble_r,
+        fill=coral,
     )
 
-    # --- Main chat bubble (larger, behind) ---
-    bx, by, bw, bh = int(110 * s), int(95 * s), int(280 * s), int(230 * s)
-    shadow_off = int(5 * s)
-
-    # Shadow
-    draw.rounded_rectangle(
-        [bx + shadow_off, by + shadow_off, bx + bw + shadow_off, by + bh + shadow_off],
-        radius=int(30 * s),
-        fill=(0, 0, 0, 40)
-    )
-    # Body
-    draw.rounded_rectangle(
-        [bx, by, bx + bw, by + bh],
-        radius=int(30 * s),
-        fill=(255, 255, 255, 242)
-    )
-    # Tail
-    tail_x = bx + int(60 * s)
+    # Bubble tail (bottom-left)
+    tail_w = int(70 * s)
+    tail_h = int(60 * s)
+    tail_x = bubble_x + int(100 * s)
+    tail_y = bubble_y + bubble_h - int(20 * s)
     draw.polygon([
-        (tail_x, by + bh),
-        (tail_x - int(22 * s), by + bh + int(50 * s)),
-        (tail_x + int(38 * s), by + bh),
-    ], fill=(255, 255, 255, 242))
+        (tail_x, tail_y),
+        (tail_x - tail_w, tail_y + tail_h),
+        (tail_x + tail_w, tail_y),
+    ], fill=coral)
 
-    # --- Smaller chat bubble (front) ---
-    sx, sy, sw, sh = int(170 * s), int(175 * s), int(240 * s), int(185 * s)
+    # --- White "M" mark inside bubble ---
+    stroke = int(54 * s)
+    white = (255, 255, 255, 255)
 
-    # Shadow
-    draw.rounded_rectangle(
-        [sx + shadow_off, sy + shadow_off, sx + sw + shadow_off, sy + sh + shadow_off],
-        radius=int(26 * s),
-        fill=(0, 0, 0, 30)
-    )
-    # Body
-    draw.rounded_rectangle(
-        [sx, sy, sx + sw, sy + sh],
-        radius=int(26 * s),
-        fill=(255, 255, 255, 235)
-    )
-    # Tail (right side)
-    tail_x2 = sx + sw - int(60 * s)
-    draw.polygon([
-        (tail_x2, sy + sh),
-        (tail_x2 + int(22 * s), sy + sh + int(45 * s)),
-        (tail_x2 - int(35 * s), sy + sh),
-    ], fill=(255, 255, 255, 235))
+    # Coordinates relative to bubble
+    bx, by = bubble_x, bubble_y
+    def px(x: float) -> int:
+        return bx + int(x * bubble_w)
+    def py(y: float) -> int:
+        return by + int(y * bubble_h)
 
-    # --- Three dots in main bubble ---
-    dot_r = int(13 * s)
-    dot_y = int(225 * s)
-    dot_colors = [
-        (99, 102, 241, 230),
-        (59, 130, 246, 230),
-        (37, 99, 235, 230),
+    m_points = [
+        (px(0.28), py(0.35)),  # left top
+        (px(0.28), py(0.72)),  # left bottom
+        (px(0.28), py(0.35)),  # left top again
+        (px(0.50), py(0.72)),  # middle bottom
+        (px(0.72), py(0.35)),  # right top
+        (px(0.72), py(0.72)),  # right bottom
     ]
-    for i, color in enumerate(dot_colors):
-        cx = int(205 * s) + int(48 * s) * i
-        draw.ellipse(
-            [cx - dot_r, dot_y - dot_r, cx + dot_r, dot_y + dot_r],
-            fill=color
-        )
 
-    # --- Text lines in smaller bubble ---
-    line_h = int(8 * s)
-    line_r = int(4 * s)
-    line_x = int(200 * s)
-    lines = [
-        (int(268 * s), (99, 102, 241, 130)),
-        (int(235 * s), (59, 130, 246, 110)),
-        (int(252 * s), (99, 102, 241, 90)),
-    ]
-    for i, (lw, color) in enumerate(lines):
-        ly = int(280 * s) + int(24 * s) * i
-        draw.rounded_rectangle(
-            [line_x, ly, line_x + lw, ly + line_h],
-            radius=line_r,
-            fill=color
-        )
+    # Draw thick polyline with rounded joints
+    draw.line(m_points, fill=white, width=stroke, joint="curve")
+
+    # Round caps at the three terminal points
+    caps = [m_points[1], m_points[3], m_points[5]]
+    for x, y in caps:
+        r = stroke // 2
+        draw.ellipse([x - r, y - r, x + r, y + r], fill=white)
 
     return img
 
 
-# Generate source at 512
-source = create_icon(512)
+if __name__ == "__main__":
+    # Generate source at 1024
+    source = create_icon(1024)
 
-# Save 256x256 PNG
-img256 = source.resize((256, 256), Image.LANCZOS)
-img256.save("icon.png", format="PNG")
-print("Created: icon.png (256x256)")
+    # Save 1024x1024 PNG (macOS app icon source)
+    source.save("icon.png", format="PNG")
+    print("Created: icon.png (1024x1024)")
 
-# Generate ICO: Pillow requires all images passed explicitly
-ico_sizes = [16, 24, 32, 48, 64, 128, 256]
-ico_images = []
-for s in ico_sizes:
-    ico_images.append(source.resize((s, s), Image.LANCZOS))
+    # Generate ICO: Pillow requires all images passed explicitly
+    ico_sizes = [16, 24, 32, 48, 64, 128, 256]
+    ico_images = []
+    for s in ico_sizes:
+        ico_images.append(source.resize((s, s), Image.Resampling.LANCZOS))
 
-# Use the largest image as base, append the rest
-ico_images[-1].save(
-    "icon.ico",
-    format="ICO",
-    sizes=[(s, s) for s in ico_sizes],
-    append_images=ico_images[:-1],
-)
-print("Created: icon.ico (multi-size)")
+    ico_images[-1].save(
+        "icon.ico",
+        format="ICO",
+        sizes=[(s, s) for s in ico_sizes],
+        append_images=ico_images[:-1],
+    )
+    print("Created: icon.ico (multi-size)")
 
-# Verify
-from PIL import IcoImagePlugin
-ico = IcoImagePlugin.IcoImageFile("icon.ico")
-print(f"ICO sizes inside: {ico.info.get('sizes', 'unknown')}")
-print("Done!")
+    print("Done!")

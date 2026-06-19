@@ -8,9 +8,9 @@ const icons = {
 }
 
 const colors = {
-  success: 'border-mc-success/30 text-mc-success',
-  error: 'border-mc-error/30 text-mc-error',
-  info: 'border-mc-text-accent/30 text-mc-text-accent',
+  success: 'bg-mc-success',
+  error: 'bg-mc-error',
+  info: 'bg-mc-text-accent',
 }
 
 export default function Toast() {
@@ -27,12 +27,12 @@ export default function Toast() {
             key={toast.id}
             className={`
               flex items-center gap-2.5 px-3 py-2.5
-              bg-mc-surface border rounded-lg shadow-lg
+              bg-mc-surface border border-mc-border rounded-xl shadow-lg
               animate-slide-up min-w-[240px] max-w-[360px]
-              ${colors[toast.type]}
             `}
           >
-            <Icon size={14} className="flex-shrink-0" />
+            <span className={`w-1 h-1 rounded-full ${colors[toast.type]}`} />
+            <Icon size={14} className="flex-shrink-0 text-mc-text-secondary" />
             <span className="text-xs text-mc-text flex-1">{toast.message}</span>
             <button
               onClick={() => removeToast(toast.id)}

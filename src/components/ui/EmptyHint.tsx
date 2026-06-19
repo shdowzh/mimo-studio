@@ -15,13 +15,13 @@ interface EmptyHintProps {
 export default function EmptyHint({ icon: Icon, title, description, action, className = '' }: EmptyHintProps) {
   return (
     <div className={`flex flex-1 items-center justify-center ${className}`}>
-      <div className="text-center space-y-2 max-w-xs px-4">
+      <div className="text-center space-y-3 max-w-xs px-4">
         {Icon && (
-          <Icon size={28} strokeWidth={1} className="text-mc-text-muted/60 mx-auto mb-1" />
+          <Icon size={36} strokeWidth={1} className="text-mc-text-muted/50 mx-auto mb-1" />
         )}
-        <p className="text-xs text-mc-text-secondary font-medium">{title}</p>
+        <p className="text-sm text-mc-text-secondary font-medium">{title}</p>
         {description && (
-          <p className="text-2xs text-mc-text-muted leading-relaxed">{description}</p>
+          <p className="text-xs text-mc-text-muted leading-relaxed">{description}</p>
         )}
         {action && <div className="pt-2">{action}</div>}
       </div>

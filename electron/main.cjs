@@ -94,14 +94,21 @@ function createWindow() {
       preload: path.join(__dirname, 'preload.cjs'),
       webSecurity: false,  // 允许 mimo-app:// → http://127.0.0.1 的跨域 SSE 连接
     },
-    backgroundColor: '#09090b',
-    titleBarStyle: 'hiddenInset',
-    titleBarOverlay: {
-      color: '#09090b',
-      symbolColor: '#a1a1aa',
-      height: 36,
-    },
+    backgroundColor: '#FAFAFA',
+    // OpenClaw 风：
+    // - macOS 保留 hiddenInset，让系统交通灯原生渲染，同时隐藏标题栏
+    // - Windows/Linux 用 frame:false + 自绘 WindowControls，保证主题跟随
+    frame: process.platform !== 'darwin',
+    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'hidden',
     show: false,
+  })
+
+  // 最大化状态变化广播给渲染端（让按钮在 ▢ ↔ ❐ 切换）
+  mainWindow.on('maximize', () => {
+    mainWindow?.webContents.send('window:maximize-change', true)
+  })
+  mainWindow.on('unmaximize', () => {
+    mainWindow?.webContents.send('window:maximize-change', false)
   })
 
   mainWindow.once('ready-to-show', () => {
@@ -435,6 +442,17 @@ app.whenReady().then(async () => {
     setupIPC()
     debugLog('createWindow...')
     createWindow()
+
+    // === 窗口控制 IPC（自绘三按钮调用，挂在 app 级别避免 activate 二次注册） ===
+    ipcMain.handle('window:minimize', () => mainWindow?.minimize())
+    ipcMain.handle('window:maximize', () => {
+      if (!mainWindow) return false
+      if (mainWindow.isMaximized()) mainWindow.unmaximize()
+      else mainWindow.maximize()
+      return mainWindow.isMaximized()
+    })
+    ipcMain.handle('window:close', () => mainWindow?.close())
+    ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false)
 
     // 首次启动时自动安装 MiMo CLI（如果缺失），非阻塞
     autoInstallIfNeeded(mainWindow).catch(err => {

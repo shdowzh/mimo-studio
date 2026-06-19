@@ -1,5 +1,5 @@
-// 消息气泡 — Phase 3 重设计
-// T3.1 左侧头像列 + T3.2 border-left + T3.3 StepBlock 折叠 + T3.5 Reasoning 隐式化
+// 消息气泡 — OpenClaw 风
+// 双边圆角气泡 + 头像 + 角色名 + 时间戳
 
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
@@ -8,6 +8,7 @@ import { Brain, Wrench, User, Bot, ChevronDown, ChevronRight, CheckCircle2, Pape
 import { useState, useMemo, memo } from 'react'
 import ToolCallCard from './ToolCallCard'
 import Spinner from '@/components/ui/Spinner'
+import { formatMessageTime } from '@/lib/formatTime'
 
 marked.setOptions({ gfm: true, breaks: true })
 
@@ -17,22 +18,19 @@ function parseMarkdown(content: string): string {
 }
 
 // === 头像 ===
-
 function Avatar({ role }: { role: 'user' | 'assistant' }) {
   return (
-    <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 ${
-      role === 'user' ? 'bg-mc-elevated' : 'bg-mc-brand-soft'
-    }`}>
-      {role === 'user'
-        ? <User size={14} className="text-mc-text-muted" />
-        : <Bot size={14} className="text-mc-brand" />
-      }
+    <div
+      className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${
+        role === 'user' ? 'bg-mc-user-bubble text-mc-user-bubble-text' : 'bg-mc-brand-soft text-mc-brand'
+      }`}
+    >
+      {role === 'user' ? <User size={15} /> : <Bot size={15} />}
     </div>
   )
 }
 
-// === Reasoning Block (T3.5) ===
-
+// === Reasoning Block ===
 function ReasoningBlock({ text, isStreaming }: { text: string; isStreaming?: boolean }) {
   const [show, setShow] = useState(false)
 
@@ -58,7 +56,7 @@ function ReasoningBlock({ text, isStreaming }: { text: string; isStreaming?: boo
         </span>
       </button>
       {show && (
-        <div className="mt-1.5 p-2.5 bg-mc-surface/50 rounded-md border-l-2 border-mc-brand/20 text-2xs text-mc-text-muted leading-relaxed font-mono max-h-[200px] overflow-y-auto whitespace-pre-wrap">
+        <div className="mt-1.5 p-2.5 bg-mc-elevated/60 rounded-lg text-2xs text-mc-text-muted leading-relaxed font-mono max-h-[200px] overflow-y-auto whitespace-pre-wrap">
           {text}
         </div>
       )}
@@ -66,8 +64,7 @@ function ReasoningBlock({ text, isStreaming }: { text: string; isStreaming?: boo
   )
 }
 
-// === Step Block (T3.3) ===
-
+// === Step Block ===
 function StepBlock({ children, stepIndex, finish, totalSteps, isLastStep }: {
   children: React.ReactNode
   stepIndex: number
@@ -139,6 +136,10 @@ interface MessageBubbleProps {
 export default memo(function MessageBubble({ message }: MessageBubbleProps) {
   const isUser = message.info.role === 'user'
   const { steps, preStep, postStep } = groupPartsBySteps(message.parts)
+  const timestamp = formatMessageTime(message.info.time.created)
+  const assistantName = message.info.model
+    ? `${message.info.model.providerID}/${message.info.model.modelID || 'auto'}`
+    : 'MiMo'
 
   if (isUser) {
     const textContent = message.parts
@@ -147,14 +148,14 @@ export default memo(function MessageBubble({ message }: MessageBubbleProps) {
       .join('\n')
 
     return (
-      <div className="flex gap-3 mb-5 animate-fade-in">
+      <div className="flex flex-row-reverse gap-3 mb-6 animate-fade-in">
         <Avatar role="user" />
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-xs font-medium text-mc-text">你</span>
-          </div>
-          <div className="rounded-lg bg-mc-elevated px-3 py-2 inline-block max-w-full">
+        <div className="flex flex-col items-end max-w-[70%] min-w-0">
+          <div className="rounded-2xl bg-mc-user-bubble text-mc-user-bubble-text px-4 py-2.5">
             <p className="text-sm whitespace-pre-wrap leading-relaxed">{textContent}</p>
+          </div>
+          <div className="mt-1 text-2xs text-mc-text-muted">
+            你 · {timestamp}
           </div>
         </div>
       </div>
@@ -162,19 +163,10 @@ export default memo(function MessageBubble({ message }: MessageBubbleProps) {
   }
 
   return (
-    <div className="flex gap-3 mb-5 animate-fade-in">
+    <div className="flex gap-3 mb-6 animate-fade-in">
       <Avatar role="assistant" />
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-xs font-medium text-mc-text">MiMo</span>
-          {message.info.model && (
-            <span className="text-2xs text-mc-text-muted">
-              {message.info.model.providerID} / {message.info.model.modelID}
-            </span>
-          )}
-        </div>
-
-        <div className="border-l-2 border-mc-brand/30 pl-4 space-y-2">
+      <div className="flex flex-col max-w-[80%] min-w-0">
+        <div className="rounded-2xl bg-mc-assistant-bubble text-mc-text px-4 py-2.5">
           {preStep.map(part => renderPart(part, false))}
           {steps.map((step, i) => (
             <StepBlock key={i} stepIndex={i} finish={step.finish} totalSteps={steps.length} isLastStep={i === steps.length - 1}>
@@ -189,6 +181,9 @@ export default memo(function MessageBubble({ message }: MessageBubbleProps) {
               <span>Agent 工作中...</span>
             </div>
           )}
+        </div>
+        <div className="mt-1 text-2xs text-mc-text-muted">
+          {assistantName} · {timestamp}
         </div>
       </div>
     </div>

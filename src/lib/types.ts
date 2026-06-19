@@ -53,7 +53,6 @@ export type {
   HealthResponse,
   // View
   ViewId,
-  ThemeId,
 } from './mimoTypes'
 
 // 重新导出常用类型别名
