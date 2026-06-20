@@ -85,6 +85,7 @@ jobs:
   gitee-release:
     needs: [macos, linux, windows]
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/download-artifact@v4
 
@@ -119,14 +120,17 @@ jobs:
           echo "==> Release ID: $RELEASE_ID"
 
           # 2. Upload all assets (skip > 100MB for Gitee limit)
+          #    curl 加超时 + 重试，避免上传挂起导致 job 无限空转
           find . -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.tar.xz" \) | while read -r f; do
             SIZE=$(stat -c%s "$f")
             if [ "$SIZE" -gt 104857600 ]; then
               echo "SKIP (>100MB): $f ($(( SIZE / 1048576 ))MB)"
             else
               echo "UPLOAD: $f ($(( SIZE / 1048576 ))MB)"
-              curl -s -X POST "$API_BASE/releases/$RELEASE_ID/attach_files?access_token=$TOKEN" \
-                -F "file=@$f" | jq -r '.name + " -> " + .browser_download_url'
+              curl -sS --max-time 600 --retry 3 --retry-delay 5 --retry-all-errors \
+                -X POST "$API_BASE/releases/$RELEASE_ID/attach_files?access_token=$TOKEN" \
+                -F "file=@$f" | jq -r '.name + " -> " + .browser_download_url' \
+                || echo "WARN: upload failed for $f (continuing)"
             fi
           done
           echo "==> Done."

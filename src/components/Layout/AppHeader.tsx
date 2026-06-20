@@ -16,7 +16,7 @@ export default function AppHeader() {
 
   return (
     <header
-      className={`shrink-0 h-[44px] drag flex items-center justify-between border-b border-mc-border-subtle bg-mc-bg/80 backdrop-blur-sm z-40 ${
+      className={`relative shrink-0 h-[44px] drag flex items-center justify-between border-b border-mc-border-subtle bg-mc-bg/80 backdrop-blur-sm z-40 ${
         IS_MAC ? 'pl-[64px]' : 'pl-3'
       } pr-0`}
     >
@@ -24,9 +24,10 @@ export default function AppHeader() {
         {/* mac 左侧不放内容；Win/Linux 左侧可预留给后续全局菜单入口 */}
       </div>
 
-      {/* 中央：全局搜索 —— 容器保持可拖动，只让搜索框本身 no-drag */}
-      <div className="flex-1 flex justify-center px-6 min-w-0">
-        <div className="no-drag">
+      {/* 中央：全局搜索 —— 绝对居中，不受左右两侧宽度不对称影响（Win/Linux 有自绘窗口按钮，mac 没有）
+          容器保持可拖动，只让搜索框本身 no-drag */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[480px] px-6 flex justify-center pointer-events-none">
+        <div className="no-drag w-full flex justify-center pointer-events-auto">
           <GlobalSearch />
         </div>
       </div>

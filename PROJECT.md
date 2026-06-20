@@ -1136,8 +1136,10 @@ V1.3.0 OpenClaw 重设计后的一轮稳定性修复，无新功能：
 | 问题 | 根因 | 修复 |
 |------|------|------|
 | 窗口拖不动 | `AppHeader` 中央搜索容器 `flex-1` + `no-drag` 铺满标题栏，无拖动余地 | 容器恢复可拖动，仅搜索框/按钮保留 `no-drag` |
+| 搜索框偏左 | 中央容器用 `flex-1 justify-center`，仅在左右两 div 间居中；Win/Linux 右侧自绘窗口按钮重、左侧轻致偏左（mac 无按钮故居中） | 改为相对 header `absolute left-1/2 -translate-x-1/2` 绝对居中，三平台一致 |
 | MemoryView 内存泄漏 | Cmd+S 的 `useEffect` 无依赖数组，每次渲染重复注册 keydown 监听 | 补 `[handleSave]` 依赖，并前移 `handleSave` 定义避免初始化前引用 |
 | 并发发送丢 abort | 模块级 `currentAbortController` 被第二次发送覆盖，首条请求失联 | 发送前先 abort 上一条；`finally` 仅清自己的 controller |
 | JSON.parse 崩溃 | 9 处持久化数据直接 `JSON.parse`，数据损坏时崩渲染进程白屏 | 新增 `lib/safeJson.ts` 统一安全解析兜底 |
+| CI gitee 上传卡死 | `attach_files` 的 `curl` 无超时/重试，单文件传输挂起致 job 无限空转 | 加 `--max-time 600 --retry 3 --retry-all-errors` + job `timeout-minutes: 30` 兜底 |
 
 **未改动（评估后判定为设计取舍或本地软件低风险）：** `webSecurity: false`（自定义协议 SSE 跨域所需）、`ensurePassword` 空串（MiMo serve SSE 不支持非空密码）、路径遍历 / 终端 spawn（本地单机操作，无外部攻击面）。
