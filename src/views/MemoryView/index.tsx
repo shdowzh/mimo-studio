@@ -31,6 +31,14 @@ export default function MemoryView() {
     })
   }, [activeType])
 
+  const handleSave = useCallback(async () => {
+    if (!isElectron()) return
+    await getAPI().files.writeMemory(activeType, content)
+    setSaved(true)
+    setLastSavedAt(Date.now())
+    setTimeout(() => setSaved(false), 2000)
+  }, [activeType, content])
+
   // Cmd+S / Ctrl+S 保存
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -41,15 +49,7 @@ export default function MemoryView() {
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
-  })
-
-  const handleSave = useCallback(async () => {
-    if (!isElectron()) return
-    await getAPI().files.writeMemory(activeType, content)
-    setSaved(true)
-    setLastSavedAt(Date.now())
-    setTimeout(() => setSaved(false), 2000)
-  }, [activeType, content])
+  }, [handleSave])
 
   // 解析 markdown 大纲
   const outline = useMemo(() => parseOutline(content), [content])

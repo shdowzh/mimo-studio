@@ -2,6 +2,7 @@
 // Phase 3 T3.7：优先显示最近 5 条用户 prompt 历史
 
 import { getAPI, isElectron } from '@/lib/ipc'
+import { safeJsonParse } from '@/lib/safeJson'
 
 const KEY = 'recent-prompts'
 const MAX = 20
@@ -9,7 +10,7 @@ const MAX = 20
 export async function getRecentPrompts(): Promise<string[]> {
   if (!isElectron()) return []
   const raw = await getAPI().settings.get(KEY)
-  return raw ? JSON.parse(raw) : []
+  return safeJsonParse<string[]>(raw, [])
 }
 
 export async function pushRecentPrompt(text: string) {

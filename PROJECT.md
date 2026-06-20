@@ -1126,3 +1126,18 @@ window.__ZUSTAND__ = useChatStore.getState()
 - IPC 通道命名：`namespace:verb`（如 `mimo:startServer`, `settings:get`）
 - 文件命名：Component PascalCase / module camelCase
 - 类型优先从 `mimoTypes.ts` 导入，`types.ts` 仅重导出 + 本地类型
+
+---
+
+## v1.3.1 — 稳定性修复（bugfix）
+
+V1.3.0 OpenClaw 重设计后的一轮稳定性修复，无新功能：
+
+| 问题 | 根因 | 修复 |
+|------|------|------|
+| 窗口拖不动 | `AppHeader` 中央搜索容器 `flex-1` + `no-drag` 铺满标题栏，无拖动余地 | 容器恢复可拖动，仅搜索框/按钮保留 `no-drag` |
+| MemoryView 内存泄漏 | Cmd+S 的 `useEffect` 无依赖数组，每次渲染重复注册 keydown 监听 | 补 `[handleSave]` 依赖，并前移 `handleSave` 定义避免初始化前引用 |
+| 并发发送丢 abort | 模块级 `currentAbortController` 被第二次发送覆盖，首条请求失联 | 发送前先 abort 上一条；`finally` 仅清自己的 controller |
+| JSON.parse 崩溃 | 9 处持久化数据直接 `JSON.parse`，数据损坏时崩渲染进程白屏 | 新增 `lib/safeJson.ts` 统一安全解析兜底 |
+
+**未改动（评估后判定为设计取舍或本地软件低风险）：** `webSecurity: false`（自定义协议 SSE 跨域所需）、`ensurePassword` 空串（MiMo serve SSE 不支持非空密码）、路径遍历 / 终端 spawn（本地单机操作，无外部攻击面）。

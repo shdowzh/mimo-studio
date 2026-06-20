@@ -20,13 +20,15 @@ export default function AppHeader() {
         IS_MAC ? 'pl-[64px]' : 'pl-3'
       } pr-0`}
     >
-      <div className="no-drag flex items-center min-w-0">
+      <div className="flex items-center min-w-0">
         {/* mac 左侧不放内容；Win/Linux 左侧可预留给后续全局菜单入口 */}
       </div>
 
-      {/* 中央：全局搜索 */}
-      <div className="no-drag flex-1 flex justify-center px-6 min-w-0">
-        <GlobalSearch />
+      {/* 中央：全局搜索 —— 容器保持可拖动，只让搜索框本身 no-drag */}
+      <div className="flex-1 flex justify-center px-6 min-w-0">
+        <div className="no-drag">
+          <GlobalSearch />
+        </div>
       </div>
 
       {/* 右：主题切换 + 窗口控件 */}

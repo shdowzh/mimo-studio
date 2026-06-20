@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import { isElectron, getAPI } from '@/lib/ipc'
+import { safeJsonParse } from '@/lib/safeJson'
 import { loadAllApiKeys, setApiKey, deleteApiKey } from '@/lib/secret'
 import { useMimoInstaller } from '@/hooks/useMimoInstaller'
 import { Settings as SettingsIcon, Palette, Info, Shield, Download, AlertCircle, CheckCircle, ChevronDown, ExternalLink, Monitor, Sun, Moon } from 'lucide-react'
@@ -371,7 +372,7 @@ function CustomProviderCard({ apiKeys, serverOk, onKeysUpdate }: {
             await setApiKey(customId, keyValue)
             const keys = { ...apiKeys, [customId]: keyValue }
             const existingRaw = await getAPI().settings.get('customProviders')
-            const existing = existingRaw ? JSON.parse(existingRaw) : []
+            const existing = safeJsonParse<any[]>(existingRaw, [])
             const updated = [...existing.filter((p: any) => p.id !== customId), { id: customId, name: name.trim(), endpoint: endpoint.trim(), type: 'openai-compatible' as const, models: [] }]
             await getAPI().settings.set('customProviders', JSON.stringify(updated))
             if (serverOk && apiKey.trim()) {

@@ -10,6 +10,7 @@ import Input from '@/components/ui/Input'
 import StatusDot from '@/components/ui/StatusDot'
 import EmptyHint from '@/components/ui/EmptyHint'
 import type { McpServer } from '@/lib/types'
+import { safeJsonParse } from '@/lib/safeJson'
 
 export default function McpView() {
   const [servers, setServers] = useState<McpServer[]>([])
@@ -27,7 +28,7 @@ export default function McpView() {
   const loadServers = async () => {
     if (!isElectron()) { setLoading(false); return }
     const raw = await getAPI().settings.get('mcpServers')
-    const data = raw ? JSON.parse(raw) : []
+    const data = safeJsonParse<McpServer[]>(raw, [])
     setServers(data || [])
     setLoading(false)
   }
@@ -35,7 +36,7 @@ export default function McpView() {
   const handleAdd = async () => {
     if (!isElectron() || !formName.trim()) return
     const raw = await getAPI().settings.get('mcpServers')
-    const servers = raw ? JSON.parse(raw) : []
+    const servers = safeJsonParse<any[]>(raw, [])
     servers.push({
       id: `mcp-${Date.now()}`,
       name: formName,
@@ -56,7 +57,7 @@ export default function McpView() {
   const handleDelete = async (id: string) => {
     if (!isElectron()) return
     const raw = await getAPI().settings.get('mcpServers')
-    const servers = (raw ? JSON.parse(raw) : []).filter((s: any) => s.id !== id)
+    const servers = safeJsonParse<any[]>(raw, []).filter((s: any) => s.id !== id)
     await getAPI().settings.set('mcpServers', JSON.stringify(servers))
     loadServers()
   }
@@ -64,7 +65,7 @@ export default function McpView() {
   const handleToggle = async (server: McpServer) => {
     if (!isElectron()) return
     const raw = await getAPI().settings.get('mcpServers')
-    const servers = (raw ? JSON.parse(raw) : []).map((s: any) =>
+    const servers = safeJsonParse<any[]>(raw, []).map((s: any) =>
       s.id === server.id ? { ...s, enabled: !server.enabled } : s)
     await getAPI().settings.set('mcpServers', JSON.stringify(servers))
     loadServers()

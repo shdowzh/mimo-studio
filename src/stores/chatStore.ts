@@ -6,6 +6,7 @@ import { mimoClient } from '@/lib/mimoClient'
 import { isElectron, getAPI } from '@/lib/ipc'
 import { sendMessageFlow } from './chatFlow'
 import { pushRecentPrompt } from '@/lib/recentPrompts'
+import { safeJsonParse } from '@/lib/safeJson'
 import { SSE_HANDLER_MAP, applyMergedDelta } from './sseHandlers'
 import type {
   SessionInfo,
@@ -24,7 +25,7 @@ let currentAbortController: AbortController | null = null
 async function getMySessionIds(): Promise<Set<string>> {
   if (!isElectron()) return new Set()
   const raw = await getAPI().settings.get(MY_SESSIONS_KEY)
-  return raw ? new Set(JSON.parse(raw)) : new Set()
+  return new Set(safeJsonParse<string[]>(raw, []))
 }
 
 async function trackSession(sessionID: string) {
@@ -44,7 +45,7 @@ async function untrackSession(sessionID: string) {
 async function getPinnedSessionIds(): Promise<string[]> {
   if (!isElectron()) return []
   const raw = await getAPI().settings.get(PINNED_SESSIONS_KEY)
-  return raw ? JSON.parse(raw) : []
+  return safeJsonParse<string[]>(raw, [])
 }
 
 async function setPinnedSessionIds(ids: string[]) {
@@ -206,6 +207,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   sendMessage: async (text: string) => {
+    // 若上一条请求仍在进行，先中止它，避免 currentAbortController 被覆盖后失联
+    if (currentAbortController) {
+      currentAbortController.abort()
+    }
     const abortController = new AbortController()
     currentAbortController = abortController
     // T3.7：记录最近 prompt
@@ -218,7 +223,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
         loadSessions: get().loadSessions,
       })
     } finally {
-      currentAbortController = null
+      // 仅当仍是自己的 controller 时才清空，避免误清掉后续消息的 controller
+      if (currentAbortController === abortController) {
+        currentAbortController = null
+      }
     }
   },
 

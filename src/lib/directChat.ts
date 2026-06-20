@@ -4,6 +4,7 @@
 
 import { isElectron, getAPI } from './ipc'
 import { loadAllApiKeys } from './secret'
+import { safeJsonParse } from './safeJson'
 import { PROVIDER_TEMPLATES } from '@/config/providerTemplates'
 import type { MessageWithParts, Part, TextPart, StepFinishPart } from './mimoTypes'
 
@@ -32,7 +33,7 @@ function generateId(): string {
 async function loadProviders(): Promise<ProviderEntry[]> {
   if (!isElectron()) return []
   const raw = await getAPI().settings.get('customProviders')
-  return raw ? JSON.parse(raw) : []
+  return safeJsonParse<ProviderEntry[]>(raw, [])
 }
 
 async function loadApiKeys(): Promise<Record<string, string>> {
