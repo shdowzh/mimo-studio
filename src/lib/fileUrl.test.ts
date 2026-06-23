@@ -26,7 +26,11 @@ describe('encodeFilePath', () => {
     expect(encodeFilePath('/home/foo/bar baz.txt')).toBe('file:///home/foo/bar%20baz.txt')
   })
 
-  it('Windows 路径经 fileURLToPath 能还原为原始路径', () => {
+  // Windows 路径的 fileURLToPath 往返只在 Windows 平台验证
+  // （Linux 的 fileURLToPath 不认盘符，还原后多出前导 /，如 '/D:/foo'）
+  const itOnWindows = process.platform === 'win32' ? it : it.skip
+
+  itOnWindows('Windows 路径经 fileURLToPath 能还原为原始路径', () => {
     const original = 'D:\\foo\\bar baz.txt'
     const url = encodeFilePath(original)
     // fileURLToPath 在 Windows 上返回带反斜杠的路径，这里只比较正斜杠归一化形式
