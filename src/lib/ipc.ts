@@ -12,7 +12,15 @@ export interface ElectronAPI {
     detect: () => Promise<{ installed: boolean; version?: string; path?: string; source?: string }>
     install: () => Promise<void>
     onInstallProgress: (callback: (data: { stdout?: string; stderr?: string }) => void) => () => void
-    onStatus: (callback: (data: { installed: boolean; version?: string; installing?: boolean; justInstalled?: boolean; error?: string }) => void) => () => void
+    onStatus: (
+      callback: (data: {
+        installed: boolean
+        version?: string
+        installing?: boolean
+        justInstalled?: boolean
+        error?: string
+      }) => void,
+    ) => () => void
   }
 
   // === 本地设置 ===
@@ -49,6 +57,8 @@ export interface ElectronAPI {
     readSkill: (name: string) => Promise<string | null>
     writeSkill: (name: string, content: string) => Promise<void>
     deleteSkill: (name: string) => Promise<void>
+    readAsDataUrl: (path: string) => Promise<string>
+    stat: (path: string) => Promise<{ size: number; isDirectory: boolean }>
   }
 
   // === 原生功能 ===
@@ -56,6 +66,8 @@ export interface ElectronAPI {
     openDirectory: () => Promise<string | null>
     openFile: (filters?: { name: string; extensions: string[] }[]) => Promise<string | null>
     showItemInFolder: (path: string) => Promise<void>
+    // 从拖入 / 粘贴的 File 对象取磁盘绝对路径。截图等无路径源返回 '' —— 调用方判空走 dataUrl 内联分支
+    getPathForFile: (file: File) => string
   }
 
   // === 自动更新 ===

@@ -1129,6 +1129,53 @@ window.__ZUSTAND__ = useChatStore.getState()
 
 ---
 
+## v1.4.0 — 聊天附件（feat）
+
+**背景：** V1.3.x 只支持纯文本输入，无法向 AI 传递文件上下文（代码片段、截图、日志等）。MiMo Code 上游已支持多模态 Part（`FilePartInput`：`data:` base64 内联图片 + `file://` 路径引用文本），客户端缺的是完整的附件收集 → 草稿管理 → 发送编排链路。
+
+**核心变更：**
+
+| 模块 | 旧实现 | 新实现 |
+|------|--------|--------|
+| 附件工厂 | 无 | `attachments.ts`：`attachmentFromPath`（磁盘路径→草稿）、`attachmentFromClipboardFile`（剪贴板→dataUrl 内联）、`buildAttachmentsBatch`（批量+部分成功） |
+| 文件 URL 编码 | 无 | `fileUrl.ts`：`encodeFilePath` 精确复刻上游 `packages/app/src/context/file/path.ts`，Windows 盘符/空格/中文正确编码 |
+| 草稿状态 | 无 | `chatStore.ts`：`draftAttachments` Map（按 sessionID 索引），`addAttachment`/`addAttachments`/`removeAttachment`/`clearAttachments` |
+| 发送编排 | `sendMessage(text)` 纯文本 | `chatFlow.ts`：`sendMessage(text, attachments)`，图片走 dataUrl 内联，文本走 `file://` + 绝对路径 |
+| 输入交互 | 无 | `MessageInput.tsx`：paperclip 按钮 + drag/drop（depth 计数器+overlay）+ paste（ClipboardEvent.items） |
+| 附件展示 | 无 | `AttachmentChip.tsx`：图片缩略图/代码图标 + 文件名 + 删除按钮 + slide-up/slide-down-out 进出场动画 |
+| 历史消息 | 无附件渲染 | `MessageBubble.tsx`：`UserFileChip` 展示用户消息中的 FilePart |
+| 文件选择器 | 无 | `main.cjs`：`native:openFile` IPC；Windows 不传 filters（Electron #19492：`*.*` 不能做默认 filter），macOS/Linux 保留筛选下拉 |
+| 文件读取 IPC | 无 | `files.cjs`：`readAsDataUrl`（图片→base64）、`statFile`（大小校验） |
+| 拖放防护 | 无 | `main.cjs`：`will-navigate` 拦截，防止拖文件到窗口非接收区被当 navigation 打开 |
+| 类型安全 | 无 | `preload.cjs`：`webUtils.getPathForFile`（Electron 32+ API）；`ipc.ts`：补类型 |
+| 二进制拦截 | 无 | `kindFromMime` 返回 `'binary'`，`attachmentFromPath` 拒绝 xlsx/pdf 等二进制文件，提示"仅支持文本/代码和图片" |
+
+**新建文件：**
+- `src/lib/attachments.ts` — 附件边界常量 + mime/kind 判定 + 工厂函数 + 批量入口
+- `src/lib/attachments.test.ts` — mime/kind/batch 单测
+- `src/lib/fileUrl.ts` — `encodeFilePath` / `encodeFilePathWithRange`
+- `src/lib/fileUrl.test.ts` — Windows/Unix 路径编码 + `fileURLToPath` 还原验证
+- `src/views/ChatView/AttachmentChip.tsx` — 草稿附件 chip 组件
+
+**修改文件：**
+- `src/lib/mimoTypes.ts` — 新增 `DraftAttachment` 类型（`absolutePath?` 可选，`kind` 含 `'binary'`）
+- `src/stores/chatStore.ts` — `draftAttachments` 状态 + 4 个 action + `sendMessage` 签名加 `attachments?`
+- `src/stores/chatFlow.ts` — parts 构造逻辑（dataUrl 内联 / file:// 路径 / binary 跳过）
+- `src/views/ChatView/MessageInput.tsx` — drag/paste 事件 + overlay + 批量错误 toast
+- `src/views/ChatView/MessageBubble.tsx` — `UserFileChip` 历史附件渲染
+- `tailwind.config.js` — `slideDownOut` keyframe（chip 出场动画）
+- `electron/main.cjs` — `will-navigate` 拦截 + `native:openFile` Windows 平台特殊处理
+- `electron/preload.cjs` — `webUtils.getPathForFile` + `files:readAsDataUrl` / `files:stat`
+- `electron/services/files.cjs` — `readAsDataUrl` / `statFile` + mime 判定表
+- `src/lib/ipc.ts` — 补 `getPathForFile` 类型
+
+**设计决策：**
+- **协议层 0 改动**：`encodeFilePath` 精确复刻上游，不发明新编码
+- **判定单一准则**：`att.dataUrl ? 内联 : file://`，不按 kind 分支
+- **部分成功语义**：`buildAttachmentsBatch` 每项独立 try/catch，失败的逐条 toast，不拖死整批
+- **截图无路径**：`absolutePath` 改可选，剪贴板截图只走 dataUrl 内联
+- **Windows 文件选择器**：不传 filters 绕过 Electron #19492（`extensions:['*']` 不能做默认 filter）
+
 ## v1.3.1 — 稳定性修复（bugfix）
 
 V1.3.0 OpenClaw 重设计后的一轮稳定性修复，无新功能：

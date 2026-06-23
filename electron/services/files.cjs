@@ -245,4 +245,42 @@ triggers:
   }
 }
 
-module.exports = { readMemory, writeMemory, readSkills, readSkill, writeSkill, deleteSkill, bootstrapDefaultFiles }
+// ============================================================
+// 附件读取：图片转 dataUrl（base64）、文件 stat
+// mime 判定表与 src/lib/attachments.ts 的 TEXT_EXTS/IMAGE_MIME 保持同步
+// ============================================================
+
+const IMAGE_MIME_CJS = {
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+}
+
+function mimeFromExt(filename) {
+  const dot = filename.lastIndexOf('.')
+  const ext = dot >= 0 ? filename.slice(dot + 1).toLowerCase() : ''
+  if (!ext) {
+    const base = filename.toLowerCase()
+    if (base === 'dockerfile' || base === 'makefile') return 'text/plain'
+    return 'application/octet-stream'
+  }
+  if (IMAGE_MIME_CJS[ext]) return IMAGE_MIME_CJS[ext]
+  return 'application/octet-stream'
+}
+
+// 读文件为 data URL（图片附件用，渲染端作为 FilePartInput.url 内联发给多模态模型）
+function readAsDataUrl(filePath) {
+  const buf = fs.readFileSync(filePath)
+  const mime = mimeFromExt(path.basename(filePath))
+  return `data:${mime};base64,${buf.toString('base64')}`
+}
+
+// 文件 stat（附件大小校验用）
+function statFile(filePath) {
+  const st = fs.statSync(filePath)
+  return { size: st.size, isDirectory: st.isDirectory() }
+}
+
+module.exports = { readMemory, writeMemory, readSkills, readSkill, writeSkill, deleteSkill, bootstrapDefaultFiles, readAsDataUrl, statFile }

@@ -64,6 +64,7 @@ export default {
       animation: {
         'fade-in': 'fadeIn 0.15s ease-out',
         'slide-up': 'slideUp 0.2s ease-out',
+        'slide-down-out': 'slideDownOut 0.12s ease-in forwards',
         'pulse-subtle': 'pulseSubtle 2s ease-in-out infinite',
       },
       keyframes: {
@@ -74,6 +75,11 @@ export default {
         slideUp: {
           '0%': { opacity: '0', transform: 'translateY(4px)' },
           '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        // chip 删除时的出场：与 slideUp 镜像 + 轻微缩放，告诉视觉"它正在离开"
+        slideDownOut: {
+          '0%': { opacity: '1', transform: 'translateY(0) scale(1)' },
+          '100%': { opacity: '0', transform: 'translateY(4px) scale(0.95)' },
         },
         pulseSubtle: {
           '0%, 100%': { opacity: '1' },

@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, webUtils } = require('electron')
 
 contextBridge.exposeInMainWorld('electronAPI', {
   // === Mimo Server 管理 ===
@@ -69,6 +69,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     readSkill: (name) => ipcRenderer.invoke('files:readSkill', name),
     writeSkill: (name, content) => ipcRenderer.invoke('files:writeSkill', name, content),
     deleteSkill: (name) => ipcRenderer.invoke('files:deleteSkill', name),
+    readAsDataUrl: (path) => ipcRenderer.invoke('files:readAsDataUrl', path),
+    stat: (path) => ipcRenderer.invoke('files:stat', path),
   },
 
   // === 原生功能 ===
@@ -76,6 +78,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openDirectory: () => ipcRenderer.invoke('native:openDirectory'),
     openFile: (filters) => ipcRenderer.invoke('native:openFile', filters),
     showItemInFolder: (path) => ipcRenderer.invoke('native:showItemInFolder', path),
+    // 从 DataTransfer.files / clipboard File 拿到磁盘绝对路径
+    // Electron 32+ 推荐 API，取代废弃的 file.path 属性
+    // 截图等"无路径源"会返回空字符串，调用方需判空
+    getPathForFile: (file) => {
+      try {
+        return webUtils.getPathForFile(file) || ''
+      } catch {
+        return ''
+      }
+    },
   },
 
   // === 自动更新 ===

@@ -3,8 +3,8 @@
 
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import type { MessageWithParts, Part, TextPart, ReasoningPart, ToolPart, StepStartPart, StepFinishPart } from '@/lib/mimoTypes'
-import { Brain, Wrench, User, Bot, ChevronDown, ChevronRight, CheckCircle2, Paperclip, Cog } from 'lucide-react'
+import type { MessageWithParts, Part, TextPart, FilePart, ReasoningPart, ToolPart, StepStartPart, StepFinishPart } from '@/lib/mimoTypes'
+import { Brain, Wrench, User, Bot, ChevronDown, ChevronRight, CheckCircle2, Paperclip, Cog, FileText, Image as ImageIcon } from 'lucide-react'
 import { useState, useMemo, memo } from 'react'
 import ToolCallCard from './ToolCallCard'
 import Spinner from '@/components/ui/Spinner'
@@ -146,13 +146,19 @@ export default memo(function MessageBubble({ message }: MessageBubbleProps) {
       .filter((p): p is TextPart => p.type === 'text')
       .map(p => p.text)
       .join('\n')
+    const fileParts = message.parts.filter((p): p is FilePart => p.type === 'file')
 
     return (
       <div className="flex flex-row-reverse gap-3 mb-6 animate-fade-in">
         <Avatar role="user" />
         <div className="flex flex-col items-end max-w-[70%] min-w-0">
           <div className="rounded-2xl bg-mc-user-bubble text-mc-user-bubble-text px-4 py-2.5">
-            <p className="text-sm whitespace-pre-wrap leading-relaxed">{textContent}</p>
+            {fileParts.length > 0 && (
+              <div className="flex flex-col gap-1.5 mb-2">
+                {fileParts.map(p => <UserFileChip key={p.id} part={p} />)}
+              </div>
+            )}
+            {textContent && <p className="text-sm whitespace-pre-wrap leading-relaxed">{textContent}</p>}
           </div>
           <div className="mt-1 text-2xs text-mc-text-muted">
             你 · {timestamp}
@@ -189,6 +195,27 @@ export default memo(function MessageBubble({ message }: MessageBubbleProps) {
     </div>
   )
 })
+
+// 用户消息里的文件附件 chip
+// data: url（图片）直接 <img>；file:// url 用图标占位（渲染器加载 file:// 受 CORS 限制，不强行加载避免白块）
+function UserFileChip({ part }: { part: FilePart }) {
+  const isImage = part.mime.startsWith('image/')
+  const isDataUrl = part.url.startsWith('data:')
+  return (
+    <div className="flex items-center gap-1.5 bg-mc-user-bubble-text/10 rounded-lg px-2 py-1 max-w-[220px]">
+      {isImage && isDataUrl ? (
+        <img src={part.url} alt={part.filename || 'image'} className="w-6 h-6 object-cover rounded shrink-0" />
+      ) : isImage ? (
+        <ImageIcon size={14} className="shrink-0 opacity-80" />
+      ) : (
+        <FileText size={14} className="shrink-0 opacity-80" />
+      )}
+      <span className="text-2xs truncate max-w-[160px]" title={part.filename}>
+        {part.filename || 'file'}
+      </span>
+    </div>
+  )
+}
 
 const TextPartView = memo(function TextPartView({ part }: { part: { id: string; text: string } }) {
   const html = useMemo(() => parseMarkdown(part.text), [part.text])

@@ -14,6 +14,7 @@ import type {
   SessionStatusInfo,
   PermissionRequest,
   FileDiff,
+  DraftAttachment,
 } from '@/lib/mimoTypes'
 
 // === 本地 Session 追踪 ===
@@ -80,10 +81,10 @@ export const selectors = {
   isAgentMode: (s: ChatState) => s.serverState.status === 'ready',
   isInitializing: (s: ChatState) => s.serverState.status === 'initializing',
   isDirectMode: (s: ChatState) => s.serverState.status === 'disconnected',
-  initError: (s: ChatState) => s.serverState.status === 'error' ? s.serverState.error : null,
-  serveMode: (s: ChatState) => s.serverState.status === 'disconnected' ? 'unknown' : s.serverState.mode,
-  serverPort: (s: ChatState) => s.serverState.status === 'disconnected' ? null : s.serverState.port,
-  serverPassword: (s: ChatState) => s.serverState.status === 'disconnected' ? '' : s.serverState.password,
+  initError: (s: ChatState) => (s.serverState.status === 'error' ? s.serverState.error : null),
+  serveMode: (s: ChatState) => (s.serverState.status === 'disconnected' ? 'unknown' : s.serverState.mode),
+  serverPort: (s: ChatState) => (s.serverState.status === 'disconnected' ? null : s.serverState.port),
+  serverPassword: (s: ChatState) => (s.serverState.status === 'disconnected' ? '' : s.serverState.password),
 }
 
 export interface ChatState {
@@ -112,6 +113,13 @@ export interface ChatState {
   // === 文件 Diff ===
   sessionDiffs: Record<string, FileDiff[]>
 
+  // === 草稿附件（按 sessionID 索引，切换 session 保留草稿）===
+  draftAttachments: Record<string, DraftAttachment[]>
+  addAttachment: (sessionID: string, att: DraftAttachment) => void
+  addAttachments: (sessionID: string, atts: DraftAttachment[]) => void
+  removeAttachment: (sessionID: string, id: string) => void
+  clearAttachments: (sessionID: string) => void
+
   // === 错误 ===
   lastError: string | null
   setLastError: (error: string | null) => void
@@ -127,7 +135,7 @@ export interface ChatState {
   // === Actions ===
   loadSessions: () => Promise<void>
   loadMessages: (sessionID: string) => Promise<void>
-  sendMessage: (text: string) => Promise<void>
+  sendMessage: (text: string, attachments?: DraftAttachment[]) => Promise<void>
   abortSession: () => Promise<void>
   replyPermission: (sessionID: string, permissionID: string, reply: 'once' | 'always' | 'reject') => Promise<void>
   deleteSession: (sessionID: string) => Promise<void>
@@ -167,6 +175,40 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   // === 文件 Diff ===
   sessionDiffs: {},
 
+  // === 草稿附件 ===
+  draftAttachments: {},
+  addAttachment: (sessionID, att) =>
+    set((s) => ({
+      draftAttachments: {
+        ...s.draftAttachments,
+        [sessionID]: [...(s.draftAttachments[sessionID] || []), att],
+      },
+    })),
+  // 批量添加（paste / drop 一次性 N 条），单次 set 避免 N 次 re-render
+  // 空数组直接返回，避免无谓的引用变更
+  addAttachments: (sessionID, atts) => {
+    if (atts.length === 0) return
+    set((s) => ({
+      draftAttachments: {
+        ...s.draftAttachments,
+        [sessionID]: [...(s.draftAttachments[sessionID] || []), ...atts],
+      },
+    }))
+  },
+  removeAttachment: (sessionID, id) =>
+    set((s) => ({
+      draftAttachments: {
+        ...s.draftAttachments,
+        [sessionID]: (s.draftAttachments[sessionID] || []).filter((a) => a.id !== id),
+      },
+    })),
+  clearAttachments: (sessionID) =>
+    set((s) => {
+      const next = { ...s.draftAttachments }
+      delete next[sessionID]
+      return { draftAttachments: next }
+    }),
+
   // === 错误 ===
   lastError: null,
   setLastError: (error) => set({ lastError: error }),
@@ -188,7 +230,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       const myIds = await getMySessionIds()
       const pinnedIds = await getPinnedSessionIds()
       const allSessions = await mimoClient.listSessions()
-      const sessions = allSessions.filter(s => myIds.has(s.id))
+      const sessions = allSessions.filter((s) => myIds.has(s.id))
       set({ sessions: sortSessions(sessions, pinnedIds), pinnedSessionIds: pinnedIds })
     } catch (err) {
       console.error('loadSessions error:', err)
@@ -206,17 +248,17 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     }
   },
 
-  sendMessage: async (text: string) => {
+  sendMessage: async (text: string, attachments?: DraftAttachment[]) => {
     // 若上一条请求仍在进行，先中止它，避免 currentAbortController 被覆盖后失联
     if (currentAbortController) {
       currentAbortController.abort()
     }
     const abortController = new AbortController()
     currentAbortController = abortController
-    // T3.7：记录最近 prompt
-    pushRecentPrompt(text).catch(() => {})
+    // T3.7：记录最近 prompt（仅文本，附件不进最近 prompt 避免路径噪音）
+    if (text.trim()) pushRecentPrompt(text).catch(() => {})
     try {
-      await sendMessageFlow(text, abortController, {
+      await sendMessageFlow(text, attachments || [], abortController, {
         get,
         set,
         trackSession,
@@ -256,7 +298,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     try {
       await mimoClient.replyPermission(sessionID, permissionID, reply)
       set((state) => {
-        const requests = state.permissionRequests[sessionID]?.filter(r => r.id !== permissionID) || []
+        const requests = state.permissionRequests[sessionID]?.filter((r) => r.id !== permissionID) || []
         return {
           permissionRequests: { ...state.permissionRequests, [sessionID]: requests },
         }
@@ -269,11 +311,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   deleteSession: async (sessionID: string) => {
     try {
       await untrackSession(sessionID)
-      const nextPinned = get().pinnedSessionIds.filter(id => id !== sessionID)
+      const nextPinned = get().pinnedSessionIds.filter((id) => id !== sessionID)
       await setPinnedSessionIds(nextPinned)
       await mimoClient.deleteSession(sessionID)
       set((state) => {
-        const newSessions = state.sessions.filter(s => s.id !== sessionID)
+        const newSessions = state.sessions.filter((s) => s.id !== sessionID)
         const newMessages = { ...state.messages }
         delete newMessages[sessionID]
         const newStatus = { ...state.sessionStatus }
@@ -314,7 +356,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       const updated = await mimoClient.updateSession(sessionID, { title })
       set((state) => ({
         sessions: sortSessions(
-          state.sessions.map(s => s.id === sessionID ? { ...s, ...updated, title } : s),
+          state.sessions.map((s) => (s.id === sessionID ? { ...s, ...updated, title } : s)),
           state.pinnedSessionIds,
         ),
       }))
@@ -333,9 +375,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
   togglePinSession: async (sessionID: string) => {
     const current = get().pinnedSessionIds
-    const next = current.includes(sessionID)
-      ? current.filter(id => id !== sessionID)
-      : [...current, sessionID]
+    const next = current.includes(sessionID) ? current.filter((id) => id !== sessionID) : [...current, sessionID]
     await setPinnedSessionIds(next)
     set((state) => ({
       pinnedSessionIds: next,
@@ -354,7 +394,10 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     // ── 批量更新机制 ──
     // 高频 delta 事件攒到 requestAnimationFrame 统一刷一次
     // 同一个 part 的多个 delta 会合并追加（避免中间态的不可变重建开销）
-    const pendingDeltas: Map<string, { sessionID: string; messageID: string; partID: string; field: string; delta: string }> = new Map()
+    const pendingDeltas: Map<
+      string,
+      { sessionID: string; messageID: string; partID: string; field: string; delta: string }
+    > = new Map()
     let rafId: number | null = null
 
     function flushDeltas() {
@@ -365,7 +408,14 @@ export const useChatStore = create<ChatState>()((set, get) => ({
       let newMessages = state.messages
       let dirty = false
       for (const [, d] of pendingDeltas) {
-        const update = applyMergedDelta({ ...state, messages: newMessages } as any, d.sessionID, d.messageID, d.partID, d.field, d.delta)
+        const update = applyMergedDelta(
+          { ...state, messages: newMessages } as any,
+          d.sessionID,
+          d.messageID,
+          d.partID,
+          d.field,
+          d.delta,
+        )
         if (update?.messages) {
           newMessages = update.messages
           dirty = true
@@ -395,68 +445,94 @@ export const useChatStore = create<ChatState>()((set, get) => ({
 
     // 注册所有事件 handler
     for (const [eventType, handler] of Object.entries(SSE_HANDLER_MAP)) {
-      handlers.push(mimoClient.on(eventType, (payload) => {
-        // delta 事件走专用队列（高频，需合并），合并后一次 set
-        if (eventType === 'message.part.delta') {
-          const { sessionID, messageID, partID, field, delta } = payload.properties as any
-          if (sessionID && messageID && partID) {
-            queueDelta({ sessionID, messageID, partID, field, delta })
-            return
-          }
-        }
-        // 非 delta 事件：即时 set()，确保后续 handler 看到最新状态
-        // （message.updated 创建 message → message.part.updated 立即能找到）
-        const state = get()
-        const update = handler(state, payload)
-        if (update) {
-          set(update)
-          // 同时刷 pending deltas（用最新状态计算，避免目标 part 被覆盖）
-          if (pendingDeltas.size > 0) {
-            const latest = get()
-            let newMessages = latest.messages
-            let dirty = false
-            for (const [, d] of pendingDeltas) {
-              const du = applyMergedDelta({ ...latest, messages: newMessages } as any, d.sessionID, d.messageID, d.partID, d.field, d.delta)
-              if (du?.messages) {
-                newMessages = du.messages
-                dirty = true
-              }
+      handlers.push(
+        mimoClient.on(eventType, (payload) => {
+          // delta 事件走专用队列（高频，需合并），合并后一次 set
+          if (eventType === 'message.part.delta') {
+            const { sessionID, messageID, partID, field, delta } = payload.properties as any
+            if (sessionID && messageID && partID) {
+              queueDelta({ sessionID, messageID, partID, field, delta })
+              return
             }
-            pendingDeltas.clear()
-            if (dirty) set({ messages: newMessages })
           }
-        }
-      }))
+          // 非 delta 事件：即时 set()，确保后续 handler 看到最新状态
+          // （message.updated 创建 message → message.part.updated 立即能找到）
+          const state = get()
+          const update = handler(state, payload)
+          if (update) {
+            set(update)
+            // 同时刷 pending deltas（用最新状态计算，避免目标 part 被覆盖）
+            if (pendingDeltas.size > 0) {
+              const latest = get()
+              let newMessages = latest.messages
+              let dirty = false
+              for (const [, d] of pendingDeltas) {
+                const du = applyMergedDelta(
+                  { ...latest, messages: newMessages } as any,
+                  d.sessionID,
+                  d.messageID,
+                  d.partID,
+                  d.field,
+                  d.delta,
+                )
+                if (du?.messages) {
+                  newMessages = du.messages
+                  dirty = true
+                }
+              }
+              pendingDeltas.clear()
+              if (dirty) set({ messages: newMessages })
+            }
+          }
+        }),
+      )
     }
 
     // server.connected — 标记连接已建立，轮询直到初始化完成
-    handlers.push(mimoClient.on('server.connected', () => {
-      const prev = get().serverState
-      const port = prev.status !== 'disconnected' ? prev.port : 0
-      const password = prev.status !== 'disconnected' ? prev.password : ''
-      const mode = prev.status !== 'disconnected' ? prev.mode : 'unknown'
-      set({ serverState: { status: 'initializing', port, password, mode } })
-      const checkReady = async (retries = 0) => {
-        if (retries > 30) {
-          const s = get().serverState
-          set({ serverState: { status: 'error', error: '初始化超时 — MiMo 服务未能在 30 秒内就绪，请检查网络连接后重试', port: s.status !== 'disconnected' ? s.port : 0, password: s.status !== 'disconnected' ? s.password : '', mode: s.status !== 'disconnected' ? s.mode : 'unknown' } })
-          get().loadSessions()
-          return
+    handlers.push(
+      mimoClient.on('server.connected', () => {
+        const prev = get().serverState
+        const port = prev.status !== 'disconnected' ? prev.port : 0
+        const password = prev.status !== 'disconnected' ? prev.password : ''
+        const mode = prev.status !== 'disconnected' ? prev.mode : 'unknown'
+        set({ serverState: { status: 'initializing', port, password, mode } })
+        const checkReady = async (retries = 0) => {
+          if (retries > 30) {
+            const s = get().serverState
+            set({
+              serverState: {
+                status: 'error',
+                error: '初始化超时 — MiMo 服务未能在 30 秒内就绪，请检查网络连接后重试',
+                port: s.status !== 'disconnected' ? s.port : 0,
+                password: s.status !== 'disconnected' ? s.password : '',
+                mode: s.status !== 'disconnected' ? s.mode : 'unknown',
+              },
+            })
+            get().loadSessions()
+            return
+          }
+          try {
+            await mimoClient.listSkills()
+            const s = get().serverState
+            set({
+              serverState: {
+                status: 'ready',
+                port: s.status !== 'disconnected' ? s.port : 0,
+                password: s.status !== 'disconnected' ? s.password : '',
+                mode: s.status !== 'disconnected' ? s.mode : 'unknown',
+              },
+            })
+            get().loadSessions()
+          } catch {
+            setTimeout(() => checkReady(retries + 1), 1000)
+          }
         }
-        try {
-          await mimoClient.listSkills()
-          const s = get().serverState
-          set({ serverState: { status: 'ready', port: s.status !== 'disconnected' ? s.port : 0, password: s.status !== 'disconnected' ? s.password : '', mode: s.status !== 'disconnected' ? s.mode : 'unknown' } })
-          get().loadSessions()
-        } catch {
-          setTimeout(() => checkReady(retries + 1), 1000)
-        }
-      }
-      checkReady()
-    }))
+        checkReady()
+      }),
+    )
 
     return () => {
-      handlers.forEach(unsub => unsub())
+      handlers.forEach((unsub) => unsub())
     }
   },
 
@@ -468,7 +544,15 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     set({ serverState: { status: 'initializing', port, password, mode } })
     const checkReady = async (retries = 0) => {
       if (retries > 30) {
-        set({ serverState: { status: 'error', error: '初始化超时 — MiMo 服务未能在 30 秒内就绪，请检查网络连接后重试', port, password, mode } })
+        set({
+          serverState: {
+            status: 'error',
+            error: '初始化超时 — MiMo 服务未能在 30 秒内就绪，请检查网络连接后重试',
+            port,
+            password,
+            mode,
+          },
+        })
         return
       }
       try {

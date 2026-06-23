@@ -42,7 +42,7 @@ function debugError(...args) {
 const { initDatabase, getDb, closeDatabase } = require('./services/database.cjs')
 const { startMimoServe, stopMimoServe, isMimoServeRunning, getMimoServePort, getMimoServePassword, getServeMode } = require('./services/streaming.cjs')
 const { detect: mimoDetect, install: mimoInstall, autoInstallIfNeeded } = require('./services/mimoInstaller.cjs')
-const { readMemory, writeMemory, readSkills, readSkill, writeSkill, deleteSkill, bootstrapDefaultFiles } = require('./services/files.cjs')
+const { readMemory, writeMemory, readSkills, readSkill, writeSkill, deleteSkill, bootstrapDefaultFiles, readAsDataUrl, statFile } = require('./services/files.cjs')
 const secret = require('./services/secret.cjs')
 // 注册自定义协议（必须在 app.whenReady 之前）
 protocol.registerSchemesAsPrivileged([
@@ -109,6 +109,16 @@ function createWindow() {
   })
   mainWindow.on('unmaximize', () => {
     mainWindow?.webContents.send('window:maximize-change', false)
+  })
+
+  // 拖放经典坑：用户拖文件到窗口非接收区（侧边栏、消息区空白处等），
+  // Chromium 会触发 will-navigate 把 file:// 当跳转，导致整个应用替换为单个文件的预览。
+  // 一律拦截：跨 origin 跳转交给 shell.openExternal，本地 file:// 直接吃掉。
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    // 允许 mimo-app:// 内部跳转（生产环境加载入口）和开发 vite 热重载
+    if (url.startsWith('mimo-app://') || url.startsWith('http://localhost:5173')) return
+    event.preventDefault()
+    debugLog(`will-navigate blocked: ${url}`)
   })
 
   mainWindow.once('ready-to-show', () => {
@@ -340,6 +350,15 @@ function setupIPC() {
     deleteSkill(name)
   })
 
+  // 附件读取（图片转 dataUrl / 文件 stat，用于聊天附件）
+  ipcMain.handle('files:readAsDataUrl', (event, filePath) => {
+    return readAsDataUrl(filePath)
+  })
+
+  ipcMain.handle('files:stat', (event, filePath) => {
+    return statFile(filePath)
+  })
+
   // === 原生功能 ===
   ipcMain.handle('native:openDirectory', async () => {
     const result = await dialog.showOpenDialog(mainWindow, {
@@ -358,10 +377,15 @@ function setupIPC() {
         f.extensions.every(e => typeof e === 'string')
       )
     }
-    const result = await dialog.showOpenDialog(mainWindow, {
-      properties: ['openFile'],
-      filters: safeFilters,
-    })
+    // Windows 上 extensions:['*'] 的 filter 有时不会成为默认选中项，
+    // 反而落到第二个 filter，导致用户以为看不到文件。
+    // 不传 filters 时 Windows 原生对话框默认显示所有文件，体验更好。
+    // macOS / Linux 上 extensions:['*'] 行为正常，保留 filter 下拉选项。
+    const dialogOpts = { properties: ['openFile'] }
+    if (safeFilters.length > 0 && process.platform !== 'win32') {
+      dialogOpts.filters = safeFilters
+    }
+    const result = await dialog.showOpenDialog(mainWindow, dialogOpts)
     return result.canceled ? null : result.filePaths[0]
   })
 

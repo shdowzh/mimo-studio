@@ -115,11 +115,7 @@ export interface ToolPart extends PartBase {
   metadata?: Record<string, unknown>
 }
 
-export type ToolState =
-  | ToolStatePending
-  | ToolStateRunning
-  | ToolStateCompleted
-  | ToolStateError
+export type ToolState = ToolStatePending | ToolStateRunning | ToolStateCompleted | ToolStateError
 
 export interface ToolStatePending {
   status: 'pending'
@@ -162,7 +158,14 @@ export interface FilePart extends PartBase {
 
 export type FilePartSource =
   | { type: 'file'; path: string; text?: { value: string; start: number; end: number } }
-  | { type: 'symbol'; path: string; range: unknown; name: string; kind: number; text?: { value: string; start: number; end: number } }
+  | {
+      type: 'symbol'
+      path: string
+      range: unknown
+      name: string
+      kind: number
+      text?: { value: string; start: number; end: number }
+    }
   | { type: 'resource'; clientName: string; uri: string; text?: { value: string; start: number; end: number } }
 
 export interface StepStartPart extends PartBase {
@@ -512,3 +515,19 @@ export interface HealthResponse {
 // ============================================================
 
 export type ViewId = 'chat' | 'terminal' | 'memory' | 'skills' | 'mcp' | 'settings'
+
+// ============================================================
+// Draft Attachment（草稿附件，渲染端持有，未发送）
+// 与发送态 FilePartInput 分离：草稿轻量，文本文件只存路径不读内容
+// ============================================================
+
+export interface DraftAttachment {
+  id: string // crypto.randomUUID()，chip 的 key + 删除定位
+  filename: string // 显示名 + 发送时 filename 字段
+  mime: string // 'image/png' | 'text/plain' | 'application/json' ...
+  kind: 'image' | 'text' | 'binary' // 决定 chip 图标 + 构造哪种 FilePartInput
+  // 文本文件走 file:// 时用；剪贴板截图等"无路径源"为 undefined，必须走 dataUrl 内联
+  absolutePath?: string
+  dataUrl?: string // 图片：主进程读出的 'data:image/...;base64,...'；剪贴板截图同样走这里
+  sizeBytes: number // 边界检查用
+}

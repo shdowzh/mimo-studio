@@ -5,7 +5,8 @@ import { mimoClient } from '@/lib/mimoClient'
 import { directChat, getDefaultProvider } from '@/lib/directChat'
 import { isElectron, getAPI } from '@/lib/ipc'
 import { getApiKey } from '@/lib/secret'
-import type { MessageWithParts, TextPartInput } from '@/lib/mimoTypes'
+import { encodeFilePath } from '@/lib/fileUrl'
+import type { MessageWithParts, PartInput, DraftAttachment } from '@/lib/mimoTypes'
 import type { ChatState } from './chatStore'
 import { selectors } from './chatStore'
 
@@ -31,7 +32,7 @@ export interface ChatFlowDeps {
 
 // ── 路径 1：Agent 模式（mimo serve 在线） ──
 
-async function sendViaAgent(text: string, deps: ChatFlowDeps): Promise<boolean> {
+async function sendViaAgent(text: string, attachments: DraftAttachment[], deps: ChatFlowDeps): Promise<boolean> {
   const state = deps.get()
   if (!selectors.serverConnected(state) || !mimoClient.isConnected) return false
 
@@ -39,23 +40,41 @@ async function sendViaAgent(text: string, deps: ChatFlowDeps): Promise<boolean> 
 
   // 如果没有当前 session，在服务端创建一个
   if (!sessionID) {
+    // title 优先用文本，否则用第一个附件文件名
+    const titleSrc = text.trim() || attachments[0]?.filename || '新会话'
     try {
       const session = await mimoClient.createSession({
-        title: text.slice(0, 30) + (text.length > 30 ? '...' : ''),
+        title: titleSrc.slice(0, 30) + (titleSrc.length > 30 ? '...' : ''),
       })
       sessionID = session.id
       deps.set({ currentSessionID: sessionID })
       await deps.trackSession(sessionID)
       deps.loadSessions()
-      deps.set(s => ({ messages: { ...s.messages, [sessionID!]: [] } }))
+      deps.set((s) => ({ messages: { ...s.messages, [sessionID!]: [] } }))
     } catch (err) {
       deps.set({ lastError: `创建会话失败: ${err instanceof Error ? err.message : String(err)}` })
       return true // 消费了这次调用，不要走 fallback
     }
   }
 
-  // 同步 API Key 到服务端
-  const parts: TextPartInput[] = [{ type: 'text', text }]
+  // ── 构造 parts：text part（可选）+ file parts ──
+  // 判定单一准则：有 dataUrl 就内联（图片附件 / 剪贴板截图都走这条）；
+  // 无 dataUrl 就走 file:// + 绝对路径（文本/代码文件，服务端 Read tool 按需读取大文件）
+  // binary 类型（xlsx/pdf 等）理论上被 attachmentFromPath 拦截，不应到达此处，防御性跳过
+  const parts: PartInput[] = []
+  if (text.trim()) parts.push({ type: 'text', text })
+  for (const att of attachments) {
+    if (att.kind === 'binary') continue // 防御性跳过
+    if (att.dataUrl) {
+      parts.push({ type: 'file', url: att.dataUrl, mime: att.mime, filename: att.filename })
+    } else if (att.absolutePath) {
+      parts.push({ type: 'file', url: encodeFilePath(att.absolutePath), mime: att.mime, filename: att.filename })
+    }
+    // 既无 dataUrl 也无 absolutePath：上游 buildAttachmentsBatch 不应产出这种附件，防御性跳过
+  }
+  // 防御：既没文本也没附件（入口已拦截）
+  if (parts.length === 0) return true
+
   const opts: any = {}
   if (state.currentProvider && state.currentProvider !== 'mimo' && state.currentModel) {
     opts.model = { providerID: state.currentProvider, modelID: state.currentModel }
@@ -66,11 +85,19 @@ async function sendViaAgent(text: string, deps: ChatFlowDeps): Promise<boolean> 
           await mimoClient.setAuth(state.currentProvider, key)
         }
       }
-    } catch (err) { console.warn('[chatFlow] sync apiKey to server failed:', err) }
+    } catch (err) {
+      console.warn('[chatFlow] sync apiKey to server failed:', err)
+    }
   }
 
   try {
-    console.log('[chatFlow] sendViaAgent', { sessionID, provider: state.currentProvider, model: state.currentModel, opts })
+    console.log('[chatFlow] sendViaAgent', {
+      sessionID,
+      provider: state.currentProvider,
+      model: state.currentModel,
+      partsCount: parts.length,
+      opts,
+    })
     await mimoClient.sendMessage(sessionID, parts, opts)
     return true // 成功
   } catch (err) {
@@ -81,9 +108,21 @@ async function sendViaAgent(text: string, deps: ChatFlowDeps): Promise<boolean> 
 
 // ── 路径 2：Fallback 模式（直连 Provider API） ──
 
-async function sendViaDirectChat(text: string, abortSignal: AbortSignal, deps: ChatFlowDeps): Promise<void> {
+async function sendViaDirectChat(
+  text: string,
+  attachments: DraftAttachment[],
+  abortSignal: AbortSignal,
+  deps: ChatFlowDeps,
+): Promise<void> {
   const state = deps.get()
   let sessionID = state.currentSessionID
+
+  // fallback 是纯文本路径，不支持多模态文件 part：附件丢弃并提示，若有文本则继续发文本
+  if (attachments.length > 0) {
+    deps.set({
+      lastError: '附件需 MiMo 服务在线时发送，当前为直连 fallback 模式，附件已忽略。请确保服务已启动后重试。',
+    })
+  }
 
   if (!sessionID) {
     sessionID = makeEphemeralSessionId()
@@ -117,8 +156,8 @@ async function sendViaDirectChat(text: string, abortSignal: AbortSignal, deps: C
   }
 
   // 先把用户消息写进本地状态（离线/直连模式也能立即看到输入）
-  if (!deps.get().messages[sessionID]?.some(m => m.info.id === userMsgId)) {
-    deps.set(s => ({
+  if (!deps.get().messages[sessionID]?.some((m) => m.info.id === userMsgId)) {
+    deps.set((s) => ({
       messages: {
         ...s.messages,
         [sessionID!]: [...(s.messages[sessionID!] || []), userMsg],
@@ -128,21 +167,19 @@ async function sendViaDirectChat(text: string, abortSignal: AbortSignal, deps: C
 
   // 收集对话历史
   const msgs = deps.get().messages[sessionID] || [userMsg]
-  const history = msgs.map(m => ({
+  const history = msgs.map((m) => ({
     role: m.info.role,
     content: m.parts
       .filter((p): p is import('@/lib/mimoTypes').TextPart => p.type === 'text')
-      .map(p => p.text).join('\n'),
+      .map((p) => p.text)
+      .join('\n'),
   }))
 
   // 加载 Memory + Skills 作为系统上下文
   if (isElectron()) {
     try {
       const api = getAPI()
-      const [userMd, memoryMd] = await Promise.all([
-        api.files.readMemory('user'),
-        api.files.readMemory('memory'),
-      ])
+      const [userMd, memoryMd] = await Promise.all([api.files.readMemory('user'), api.files.readMemory('memory')])
       let systemContext = ''
       if (userMd) systemContext += `## 用户画像（USER.md）\n\n${userMd}\n\n`
       if (memoryMd) systemContext += `## 项目记忆（MEMORY.md）\n\n${memoryMd}\n\n`
@@ -157,7 +194,9 @@ async function sendViaDirectChat(text: string, abortSignal: AbortSignal, deps: C
       if (systemContext) {
         history.unshift({ role: 'system' as any, content: systemContext })
       }
-    } catch (err) { console.warn('[chatFlow] load system context failed:', err) }
+    } catch (err) {
+      console.warn('[chatFlow] load system context failed:', err)
+    }
   }
 
   // 准备助手消息占位
@@ -173,16 +212,18 @@ async function sendViaDirectChat(text: string, abortSignal: AbortSignal, deps: C
       agent: 'direct',
       model: { providerID: providerId, modelID: modelId },
     },
-    parts: [{
-      type: 'text',
-      id: textPartId,
-      sessionID: sessionID!,
-      messageID: assistantMsgId,
-      text: '',
-    }],
+    parts: [
+      {
+        type: 'text',
+        id: textPartId,
+        sessionID: sessionID!,
+        messageID: assistantMsgId,
+        text: '',
+      },
+    ],
   }
 
-  deps.set(s => ({
+  deps.set((s) => ({
     messages: {
       ...s.messages,
       [sessionID!]: [...(s.messages[sessionID!] || []), assistantMsg],
@@ -204,10 +245,10 @@ async function sendViaDirectChat(text: string, abortSignal: AbortSignal, deps: C
           deps.set((s) => {
             const sessionMsgs = s.messages[sessionID!]
             if (!sessionMsgs) return {}
-            const msgIdx = sessionMsgs.findIndex(m => m.info.id === assistantMsgId)
+            const msgIdx = sessionMsgs.findIndex((m) => m.info.id === assistantMsgId)
             if (msgIdx < 0) return {}
             const msg = sessionMsgs[msgIdx]
-            const partIdx = msg.parts.findIndex(p => p.id === textPartId)
+            const partIdx = msg.parts.findIndex((p) => p.id === textPartId)
             if (partIdx < 0) return {}
             const newParts = [...msg.parts]
             const oldPart = newParts[partIdx] as import('@/lib/mimoTypes').TextPart
@@ -227,11 +268,9 @@ async function sendViaDirectChat(text: string, abortSignal: AbortSignal, deps: C
                 id: assistantMsgId,
                 sessionID: sessionID!,
               },
-              parts: final.parts.map(p => ({ ...p, sessionID: sessionID!, messageID: assistantMsgId })),
+              parts: final.parts.map((p) => ({ ...p, sessionID: sessionID!, messageID: assistantMsgId })),
             }
-            const newMsgs = sessionMsgs.map(m =>
-              m.info.id === assistantMsgId ? normalized : m
-            )
+            const newMsgs = sessionMsgs.map((m) => (m.info.id === assistantMsgId ? normalized : m))
             return {
               messages: { ...s.messages, [sessionID!]: newMsgs },
               sessionStatus: { ...s.sessionStatus, [sessionID!]: { type: 'idle' } },
@@ -242,11 +281,19 @@ async function sendViaDirectChat(text: string, abortSignal: AbortSignal, deps: C
           deps.set((s) => {
             const sessionMsgs = s.messages[sessionID!]
             if (!sessionMsgs) return {}
-            const newMsgs = sessionMsgs.map(m => {
+            const newMsgs = sessionMsgs.map((m) => {
               if (m.info.id !== assistantMsgId) return m
               return {
                 ...m,
-                parts: [{ type: 'text' as const, id: textPartId, sessionID: sessionID!, messageID: assistantMsgId, text: `⚠️ ${error}` }],
+                parts: [
+                  {
+                    type: 'text' as const,
+                    id: textPartId,
+                    sessionID: sessionID!,
+                    messageID: assistantMsgId,
+                    text: `⚠️ ${error}`,
+                  },
+                ],
               }
             })
             return {
@@ -273,13 +320,20 @@ async function sendViaDirectChat(text: string, abortSignal: AbortSignal, deps: C
 
 // ── 入口：编排三条路径 ──
 
-export async function sendMessageFlow(text: string, abortController: AbortController, deps: ChatFlowDeps): Promise<void> {
-  if (!text.trim()) return
+export async function sendMessageFlow(
+  text: string,
+  attachments: DraftAttachment[],
+  abortController: AbortController,
+  deps: ChatFlowDeps,
+): Promise<void> {
+  const hasText = text.trim().length > 0
+  const hasAtt = attachments.length > 0
+  if (!hasText && !hasAtt) return
 
   // 先尝试 Agent 模式
-  const handled = await sendViaAgent(text, deps)
+  const handled = await sendViaAgent(text, attachments, deps)
   if (handled) return
 
   // fallback 到直连
-  await sendViaDirectChat(text, abortController.signal, deps)
+  await sendViaDirectChat(text, attachments, abortController.signal, deps)
 }
