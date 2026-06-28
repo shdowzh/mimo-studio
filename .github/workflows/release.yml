@@ -76,10 +76,6 @@ jobs:
         with:
           name: windows-setup
           path: release/MiMo-Studio-Setup-*.exe
-      - uses: actions/upload-artifact@v4
-        with:
-          name: windows-portable
-          path: release/MiMo-Studio-*-win-*-Portable.tar.xz
 
   # ── GitHub Release ─────────────────────────────────────
   github-release:

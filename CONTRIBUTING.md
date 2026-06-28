@@ -58,7 +58,10 @@ mimo-studio/
 ## 发布流程
 
 ```bash
-npm run release          # 构建所有平台安装包
+npm run electron:build:win    # 构建 Windows (exe)
+npm run electron:build:mac    # 构建 macOS (DMG + tar.xz)
+npm run electron:build:linux  # 构建 Linux (AppImage + deb + tar.xz)
+npm run electron:build:all    # 构建全部平台
 ```
 
-产物在 `release/` 目录下，包含 SHA256 校验和。
+产物在 `release/` 目录下。
