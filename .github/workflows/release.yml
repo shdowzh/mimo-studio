@@ -81,6 +81,25 @@ jobs:
           name: windows-portable
           path: release/MiMo-Studio-*-win-*-Portable.tar.xz
 
+  # ── GitHub Release ─────────────────────────────────────
+  github-release:
+    needs: [macos, linux, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            **/*.dmg
+            **/*.exe
+            **/*.AppImage
+            **/*.deb
+            **/*.tar.xz
+          generate_release_notes: true
+
   # ── Gitee Release (aggregator) ───────────────────────────
   gitee-release:
     needs: [macos, linux, windows]
