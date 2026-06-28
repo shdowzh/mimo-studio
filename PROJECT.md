@@ -1129,7 +1129,53 @@ window.__ZUSTAND__ = useChatStore.getState()
 
 ---
 
-## v1.4.0 — 聊天附件（feat）
+---
+
+## v1.5.0 — 任意文件附件 + 模型能力提示（feat）
+
+**背景：** v1.4.0 把附件限制在"图片 + 文本/代码"，二进制文件（pdf/xlsx/docx 等）直接抛错"不支持"。但用户的真实需求是"AI 帮我看看这个文件"——文件类型本身不应阻塞，能不能解析是 Agent 的工具能力问题。同时 v1.4.0 之前 Provider 报错（特别是模型不支持图片输入）以英文 stack trace 形式呈现，用户看不懂也不知道下一步该怎么办。
+
+**核心变更：**
+
+| 模块 | 旧实现 | 新实现 |
+|------|--------|--------|
+| binary 附件 | `attachmentFromPath` 直接抛错"不支持此类型文件" | 放开通过，仅校验大小（≤100MB）；仅保留 `absolutePath`，不读 dataUrl |
+| binary 发送 | 防御性 `continue` 跳过 | `chatFlow.ts` 把 binary 路径拼进 text part：`[用户附加了 N 个文件，请按需使用 Read/Bash 等工具读取：- ${path} (${mime}, ${size})]`，路径用 backtick 包裹避免 Markdown 吞反斜杠 |
+| chip 视觉 | `FileText`/`FileCode` 图标统一显示 | binary 用 `File` 通用图标 + 扩展名徽章（PDF/XLSX/DOCX）+ `border-dashed` + ring 区分"路径附件"vs"内联附件" |
+| 模型能力查询 | 无 | `modelCapabilities.ts`：`modelSupports(provider, model, 'vision' \| 'tools' \| 'reasoning')` → `'yes' \| 'no' \| 'unknown'`；先查 `PROVIDER_TEMPLATES.capabilities` 再走启发式（claude-*/gpt-4o/-vl-/qwen3-/deepseek- 等正则）|
+| Provider 模板 | `models: [{id, name, description?}]` | 加 `capabilities?: ('vision' \| 'tools' \| 'reasoning')[]` 字段，给 8 个 provider 的 24 个模型补声明 |
+| vision 事前提示 | 无 | `AttachmentChip` 加 `warning?: string` prop；图片附件 + `modelSupports === 'no'` 时显示 ⚠️ 黄色角标 + ring 描边，hover 提示切换模型 |
+| 错误转译 | `[Error] does not support image_url` 原文塞 lastError | `errorTranslate.ts`：6 类匹配（vision-unsupported/auth/rate-limit/context-too-long/network/unknown）→ 中文 friendly + suggestion；接入 `sseHandlers.handleSessionError` + `chatFlow` 的 onError/catch |
+| fallback binary 拦截 | 无 | `MessageInput.ingestSources` + `handleAttach`：`!isAgentMode && kind === 'binary'` 时 toast 拒绝，避免发出去白挨骂 |
+| 文案 | "仅支持图片和文本/代码文件" | placeholder 改成"可拖入/粘贴图片，或附加任意文件"；剪贴板 binary 错误改成"如需附加其他文件，请拖入或点附件按钮" |
+
+**新建文件：**
+- `src/lib/modelCapabilities.ts` — 模型能力三态查询（yes/no/unknown，保守原则：未知不冤枉）
+- `src/lib/modelCapabilities.test.ts` — 模板优先 / 启发式 / 未知模型 / mimo provider 用例
+- `src/lib/errorTranslate.ts` — 错误转译表 + `formatTranslatedError`
+- `src/lib/errorTranslate.test.ts` — 6 类错误正则 + hasImage 上下文加权
+
+**修改文件：**
+- `src/lib/attachments.ts` — 加 `MAX_BINARY_BYTES = 100MB` + `formatBytes()`；`attachmentFromPath` 不再拒绝 binary；剪贴板拒绝文案精简
+- `src/lib/attachments.test.ts` — 新增 `formatBytes` 用例
+- `src/stores/chatFlow.ts` — binary 拼 text part；onError/catch 走 `translateModelError`
+- `src/stores/sseHandlers.ts` — `handleSessionError` 看最近一条 user 消息有无图片 part，调 `translateModelError`
+- `src/config/providerTemplates.ts` — 加 `ModelCapability` 类型 + 24 个模型补 `capabilities`
+- `src/views/ChatView/AttachmentChip.tsx` — binary 专属视觉 + `warning?` prop ⚠️ 角标
+- `src/views/ChatView/MessageInput.tsx` — fallback binary 拦截 + image chip vision warning 计算 + placeholder 文案
+
+**设计决策：**
+- **binary 不读内容**：路径作为字符串拼到 text part，Agent 自行决定何时用什么工具读（Read 读 pdf 是乱码，Bash 调 pdftotext / python 才合适，让 LLM 判断）。这样客户端零服务端依赖，立即可用
+- **能力三态**：`'yes' | 'no' | 'unknown'`。**未声明 ≠ 不支持** —— 只对显式声明 capabilities 但不含 vision 的模型提示，避免冤枉新模型 / 第三方自定义 provider。`mimo`/`opencode` provider 路由下游模型不可见，一律 'unknown' 不打扰
+- **事前提示不阻塞发送**：白名单可能过时，最终真相在 Provider API 响应。chip 显示 ⚠️ 即可，仍允许发送。事后由 `errorTranslate` 兜底转译
+- **路径 backtick 包裹**：避免 Windows 反斜杠路径 `C:\Users\foo` 被 Markdown 吞掉变成 `C:Usersfoo`，Agent 收到的 raw 字符串保持原样
+- **fallback 阻塞 binary**：图片在 fallback 下也能发（dataUrl 内联），但 binary 只有路径，纯文本 Provider 拿到一行路径字符串毫无意义，事前拦截比事后报错更好
+- **错误转译不吞 raw**：`TranslatedError.raw` 永远保留原文，UI 可选展开。category 字段供未来扩展操作按钮（如"切换模型"快捷入口）
+- **跨平台**：所有改动都是纯 JS/React + 正则 + 字符串拼接，无平台差异。`encodeFilePath` 未触碰，image/text 附件的 Windows 盘符/反斜杠处理沿用 v1.4.0 + commit `65b4504` 的修复
+
+**测试覆盖：**
+- 新增 21 个用例（modelCapabilities 11 + errorTranslate 10）
+- 全部测试：60 passed | 1 skipped（v1.4.0 是 39 passed | 1 skipped）
 
 **背景：** V1.3.x 只支持纯文本输入，无法向 AI 传递文件上下文（代码片段、截图、日志等）。MiMo Code 上游已支持多模态 Part（`FilePartInput`：`data:` base64 内联图片 + `file://` 路径引用文本），客户端缺的是完整的附件收集 → 草稿管理 → 发送编排链路。
 
@@ -1148,7 +1194,7 @@ window.__ZUSTAND__ = useChatStore.getState()
 | 文件读取 IPC | 无 | `files.cjs`：`readAsDataUrl`（图片→base64）、`statFile`（大小校验） |
 | 拖放防护 | 无 | `main.cjs`：`will-navigate` 拦截，防止拖文件到窗口非接收区被当 navigation 打开 |
 | 类型安全 | 无 | `preload.cjs`：`webUtils.getPathForFile`（Electron 32+ API）；`ipc.ts`：补类型 |
-| 二进制拦截 | 无 | `kindFromMime` 返回 `'binary'`，`attachmentFromPath` 拒绝 xlsx/pdf 等二进制文件，提示"仅支持文本/代码和图片" |
+| 二进制拦截 | 无 | `kindFromMime` 返回 `'binary'`，`attachmentFromPath` 拒绝 xlsx/pdf 等二进制文件，提示"仅支持文本/代码和图片"（**v1.5.0 已放开，改为路径附件**） |
 
 **新建文件：**
 - `src/lib/attachments.ts` — 附件边界常量 + mime/kind 判定 + 工厂函数 + 批量入口

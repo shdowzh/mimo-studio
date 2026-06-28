@@ -13,6 +13,7 @@ import type {
   SSEEventPayload,
 } from '@/lib/mimoTypes'
 import type { ChatState } from './chatStore'
+import { translateModelError, formatTranslatedError } from '@/lib/errorTranslate'
 
 // ── 辅助：按 messageID 索引消息，避免 .map 遍历 ──
 
@@ -275,8 +276,17 @@ export function handleSessionError(
 ): Partial<ChatState> | null {
   const { error, sessionID } = payload.properties as any
   const sid = sessionID
+  const raw = `[${error?.name || 'Error'}] ${error?.message || 'Unknown error'}`
+  // 检查这条会话的最近一条 user 消息是否带图片附件，辅助 vision 误判命中
+  const lastUserMsg = sid
+    ? [...(state.messages[sid] || [])].reverse().find((m) => m.info.role === 'user')
+    : undefined
+  const hasImage = !!lastUserMsg?.parts.some(
+    (p: any) => p.type === 'file' && typeof p.mime === 'string' && p.mime.startsWith('image/'),
+  )
+  const translated = translateModelError(raw, { hasImage })
   return {
-    lastError: `[${error?.name || 'Error'}] ${error?.message || 'Unknown error'}`,
+    lastError: formatTranslatedError(translated),
     sessionStatus: sid ? { ...state.sessionStatus, [sid]: { type: 'idle' as const } } : state.sessionStatus,
   }
 }

@@ -11,7 +11,7 @@
 //          外层 border 预留 border-2，避免 hover 切 border-2 时撑大尺寸。
 
 import { useState, useRef, useEffect } from 'react'
-import { useChatStore } from '@/stores/chatStore'
+import { useChatStore, selectors } from '@/stores/chatStore'
 import { useUIStore } from '@/stores/uiStore'
 import { isElectron, getAPI } from '@/lib/ipc'
 import {
@@ -20,6 +20,8 @@ import {
   FILE_PICKER_FILTERS,
   type AttachmentSource,
 } from '@/lib/attachments'
+import { modelSupports } from '@/lib/modelCapabilities'
+import type { DraftAttachment } from '@/lib/mimoTypes'
 import { Send, Square, Paperclip, AtSign, Settings } from 'lucide-react'
 import ContextUsageBar from './ContextUsageBar'
 import ModelPicker from './ModelPicker'
@@ -64,8 +66,14 @@ export default function MessageInput() {
   const clearAttachments = useChatStore((s) => s.clearAttachments)
   const addToast = useUIStore((s) => s.addToast)
   const sessionStatus = useChatStore((s) => (currentSessionID ? s.sessionStatus[currentSessionID] : undefined))
+  const isAgentMode = useChatStore(selectors.isAgentMode)
+  const currentProvider = useChatStore((s) => s.currentProvider)
+  const currentModel = useChatStore((s) => s.currentModel)
   const isBusy = sessionStatus?.type === 'busy'
   const isDragOver = dragDepth > 0
+
+  // 当前模型是否明确"不支持视觉"——image chip 据此显示 ⚠️ 角标
+  const visionUnsupported = modelSupports(currentProvider, currentModel, 'vision') === 'no'
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -75,10 +83,21 @@ export default function MessageInput() {
   }, [text])
 
   // 共用：把分类后的 sources 批量构造附件 → 部分成功语义
+  // fallback 模式下 binary 路径附件无意义（模型只看到一行路径字符串，没工具读），事前拦截
   const ingestSources = async (sources: AttachmentSource[]) => {
     if (sources.length === 0) return
     const { ok, errors } = await buildAttachmentsBatch(sources)
-    if (ok.length > 0) addAttachments(draftKey, ok)
+    const filtered: DraftAttachment[] = []
+    for (const att of ok) {
+      if (!isAgentMode && att.kind === 'binary') {
+        errors.push(
+          `当前为离线模式，无法附加文件「${att.filename}」 —— AI 无法读取本地路径。请启动 MiMo Serve 或仅附加图片`,
+        )
+        continue
+      }
+      filtered.push(att)
+    }
+    if (filtered.length > 0) addAttachments(draftKey, filtered)
     for (const msg of errors) addToast(msg, 'error')
   }
 
@@ -92,6 +111,13 @@ export default function MessageInput() {
       const filePath = await getAPI().native.openFile(FILE_PICKER_FILTERS)
       if (!filePath) return // 用户取消
       const att = await attachmentFromPath(filePath)
+      if (!isAgentMode && att.kind === 'binary') {
+        addToast(
+          `当前为离线模式，无法附加文件「${att.filename}」 —— AI 无法读取本地路径。请启动 MiMo Serve 或仅附加图片`,
+          'error',
+        )
+        return
+      }
       addAttachment(draftKey, att)
     } catch (err) {
       addToast(err instanceof Error ? err.message : String(err), 'error')
@@ -189,7 +215,7 @@ export default function MessageInput() {
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
-            placeholder={`发消息（Enter 发送 · Shift+Enter 换行 · 可拖入 / 粘贴文件、截图）`}
+            placeholder={`发消息（Enter 发送 · Shift+Enter 换行 · 可拖入/粘贴图片，或附加任意文件）`}
             disabled={isBusy}
             className="w-full bg-transparent text-sm text-mc-text placeholder:text-mc-text-muted resize-none outline-none min-h-[24px] max-h-[160px] leading-relaxed py-1"
             rows={1}
@@ -199,7 +225,16 @@ export default function MessageInput() {
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-1.5 px-4 py-2 border-t border-mc-border-subtle/50">
             {attachments.map((a) => (
-              <AttachmentChip key={a.id} att={a} onRemove={() => removeAttachment(draftKey, a.id)} />
+              <AttachmentChip
+                key={a.id}
+                att={a}
+                onRemove={() => removeAttachment(draftKey, a.id)}
+                warning={
+                  a.kind === 'image' && visionUnsupported
+                    ? '当前模型可能不支持图片输入，发送可能失败 — 建议切换到支持视觉的模型'
+                    : undefined
+                }
+              />
             ))}
           </div>
         )}

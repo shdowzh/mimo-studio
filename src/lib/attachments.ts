@@ -10,6 +10,16 @@ import { getAPI, isElectron } from './ipc'
 // === 边界 ===
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024 // 10MB（base64 后 ~13MB，可接受）
 export const MAX_TEXT_BYTES = 2 * 1024 * 1024 // 2MB（file:// 让服务端按需 Read，草稿期拦截巨型文件噪音）
+// binary 文件不读内容，仅传路径，上限放宽到 100MB（拦截 ISO 镜像等误选）
+export const MAX_BINARY_BYTES = 100 * 1024 * 1024
+
+// 字节数 → 人类可读（B / KB / MB / GB）
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes}B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)}MB`
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)}GB`
+}
 
 // === 扩展名 → mime（与 electron/services/files.cjs EXT_MIME 同步）===
 // 注意：服务端 file:// 协议仅在 mime === 'text/plain' 时走 Read tool 读取文本内容，
@@ -162,11 +172,20 @@ export async function attachmentFromPath(absPath: string): Promise<DraftAttachme
 
   if (stat.isDirectory) throw new Error('不能附加目录，请选择文件')
 
-  // 二进制文件（xlsx / pdf / docx 等）：服务端 Read tool 只认 text/plain，发过去必报错
+  // 二进制文件（pdf / xlsx / docx / 任意 application/octet-stream）：不读内容、不内联，
+  // 仅保留绝对路径——chatFlow 会把路径拼进 text part，让 Agent 用工具按需读取。
   if (kind === 'binary') {
-    throw new Error(
-      `不支持此类型文件（${mime}），仅支持文本/代码文件和图片。建议让 AI 自行读取该文件`,
-    )
+    if (stat.size > MAX_BINARY_BYTES) {
+      throw new Error(`文件过大（${formatBytes(stat.size)} > ${formatBytes(MAX_BINARY_BYTES)}）`)
+    }
+    return {
+      id: crypto.randomUUID(),
+      filename,
+      mime,
+      kind,
+      absolutePath: absPath,
+      sizeBytes: stat.size,
+    }
   }
 
   const base: DraftAttachment = {
@@ -180,12 +199,12 @@ export async function attachmentFromPath(absPath: string): Promise<DraftAttachme
 
   if (kind === 'image') {
     if (stat.size > MAX_IMAGE_BYTES) {
-      throw new Error(`图片过大（${(stat.size / 1024 / 1024).toFixed(1)}MB > 10MB）`)
+      throw new Error(`图片过大（${formatBytes(stat.size)} > ${formatBytes(MAX_IMAGE_BYTES)}）`)
     }
     base.dataUrl = await api.files.readAsDataUrl(absPath)
   } else {
     if (stat.size > MAX_TEXT_BYTES) {
-      throw new Error(`文本文件过大（${(stat.size / 1024 / 1024).toFixed(1)}MB > 2MB），建议让 AI 自行读取`)
+      throw new Error(`文本文件过大（${formatBytes(stat.size)} > ${formatBytes(MAX_TEXT_BYTES)}），建议让 AI 自行读取`)
     }
   }
 
@@ -212,10 +231,10 @@ export async function attachmentFromClipboardFile(file: File): Promise<DraftAtta
   const kind = kindFromMime(mime)
 
   if (kind !== 'image') {
-    throw new Error(`不支持粘贴此类型文件（${mime || '未知'}），仅支持图片和文本/代码文件`)
+    throw new Error('剪贴板里只能粘贴图片；如需附加其他文件，请拖入或点附件按钮选择')
   }
   if (file.size > MAX_IMAGE_BYTES) {
-    throw new Error(`图片过大（${(file.size / 1024 / 1024).toFixed(1)}MB > 10MB）`)
+    throw new Error(`图片过大（${formatBytes(file.size)} > ${formatBytes(MAX_IMAGE_BYTES)}）`)
   }
 
   const dataUrl = await new Promise<string>((resolve, reject) => {

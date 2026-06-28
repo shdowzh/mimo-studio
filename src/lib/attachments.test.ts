@@ -1,9 +1,9 @@
-// attachments.ts 测试 — mime 判定与 kind 分类，buildAttachmentsBatch 错误聚合语义
+// attachments.ts 测试 — mime 判定与 kind 分类，buildAttachmentsBatch 错误聚合语义，formatBytes 渲染
 // attachmentFromPath / attachmentFromClipboardFile 依赖 Electron IPC / 浏览器 File API，
 // 不在单元测试范围（需集成测试）；这里只测纯函数 + 错误收集行为。
 
 import { describe, it, expect } from 'vitest'
-import { mimeFromFilename, kindFromMime, buildAttachmentsBatch } from './attachments'
+import { mimeFromFilename, kindFromMime, buildAttachmentsBatch, formatBytes } from './attachments'
 
 describe('mimeFromFilename', () => {
   it('图片扩展名返回对应 image mime', () => {
@@ -82,5 +82,18 @@ describe('buildAttachmentsBatch', () => {
       expect(typeof msg).toBe('string')
       expect(msg.length).toBeGreaterThan(0)
     }
+  })
+})
+
+describe('formatBytes', () => {
+  it('小于 1KB → 字节', () => {
+    expect(formatBytes(0)).toBe('0B')
+    expect(formatBytes(512)).toBe('512B')
+  })
+
+  it('KB / MB / GB 分级', () => {
+    expect(formatBytes(1536)).toBe('1.5KB')
+    expect(formatBytes(2 * 1024 * 1024)).toBe('2.0MB')
+    expect(formatBytes(1.25 * 1024 * 1024 * 1024)).toBe('1.25GB')
   })
 })

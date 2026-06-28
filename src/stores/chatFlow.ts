@@ -6,6 +6,8 @@ import { directChat, getDefaultProvider } from '@/lib/directChat'
 import { isElectron, getAPI } from '@/lib/ipc'
 import { getApiKey } from '@/lib/secret'
 import { encodeFilePath } from '@/lib/fileUrl'
+import { formatBytes } from '@/lib/attachments'
+import { translateModelError, formatTranslatedError } from '@/lib/errorTranslate'
 import type { MessageWithParts, PartInput, DraftAttachment } from '@/lib/mimoTypes'
 import type { ChatState } from './chatStore'
 import { selectors } from './chatStore'
@@ -57,14 +59,28 @@ async function sendViaAgent(text: string, attachments: DraftAttachment[], deps: 
     }
   }
 
-  // ── 构造 parts：text part（可选）+ file parts ──
-  // 判定单一准则：有 dataUrl 就内联（图片附件 / 剪贴板截图都走这条）；
-  // 无 dataUrl 就走 file:// + 绝对路径（文本/代码文件，服务端 Read tool 按需读取大文件）
-  // binary 类型（xlsx/pdf 等）理论上被 attachmentFromPath 拦截，不应到达此处，防御性跳过
+  // ── 构造 parts ──
+  // 三类附件不同处理：
+  //   - image：dataUrl 内联走 file part
+  //   - text：file:// + 绝对路径走 file part，服务端 Read tool 按需读取
+  //   - binary：不发 file part —— 把路径拼到 text part 末尾，让 Agent 自行用 Read/Bash 等工具按需打开
+  //              （服务端 file:// 协议只把 text/plain 走 Read tool，binary mime 无内置处理通路）
   const parts: PartInput[] = []
-  if (text.trim()) parts.push({ type: 'text', text })
-  for (const att of attachments) {
-    if (att.kind === 'binary') continue // 防御性跳过
+  const binaryAtts = attachments.filter((a) => a.kind === 'binary' && a.absolutePath)
+  const inlineAtts = attachments.filter((a) => a.kind !== 'binary')
+
+  let finalText = text
+  if (binaryAtts.length > 0) {
+    // 路径用 backtick 包裹：Windows 反斜杠在 Markdown 里不会被吞，Agent 收到的 raw 字符串也保持原状
+    const lines = binaryAtts
+      .map((a) => `- \`${a.absolutePath}\`  (${a.mime}, ${formatBytes(a.sizeBytes)})`)
+      .join('\n')
+    const hint = `[用户附加了 ${binaryAtts.length} 个文件，请按需使用 Read/Bash 等工具读取：\n${lines}]`
+    finalText = text.trim() ? `${text}\n\n${hint}` : hint
+  }
+  if (finalText.trim()) parts.push({ type: 'text', text: finalText })
+
+  for (const att of inlineAtts) {
     if (att.dataUrl) {
       parts.push({ type: 'file', url: att.dataUrl, mime: att.mime, filename: att.filename })
     } else if (att.absolutePath) {
@@ -278,6 +294,9 @@ async function sendViaDirectChat(
           })
         },
         onError: (error: string) => {
+          const hasImage = attachments.some((a) => a.kind === 'image')
+          const translated = translateModelError(error, { hasImage })
+          const friendly = formatTranslatedError(translated)
           deps.set((s) => {
             const sessionMsgs = s.messages[sessionID!]
             if (!sessionMsgs) return {}
@@ -291,7 +310,7 @@ async function sendViaDirectChat(
                     id: textPartId,
                     sessionID: sessionID!,
                     messageID: assistantMsgId,
-                    text: `⚠️ ${error}`,
+                    text: `⚠️ ${friendly}`,
                   },
                 ],
               }
@@ -299,7 +318,7 @@ async function sendViaDirectChat(
             return {
               messages: { ...s.messages, [sessionID!]: newMsgs },
               sessionStatus: { ...s.sessionStatus, [sessionID!]: { type: 'idle' } },
-              lastError: error,
+              lastError: friendly,
             }
           })
         },
@@ -310,8 +329,11 @@ async function sendViaDirectChat(
     if (err instanceof Error && err.name === 'AbortError') {
       // 用户主动中止
     } else {
+      const raw = err instanceof Error ? err.message : String(err)
+      const hasImage = attachments.some((a) => a.kind === 'image')
+      const friendly = formatTranslatedError(translateModelError(raw, { hasImage }))
       deps.set({
-        lastError: `发送消息失败: ${err instanceof Error ? err.message : String(err)}`,
+        lastError: `发送消息失败: ${friendly}`,
         sessionStatus: { ...deps.get().sessionStatus, [sessionID!]: { type: 'idle' } },
       })
     }
